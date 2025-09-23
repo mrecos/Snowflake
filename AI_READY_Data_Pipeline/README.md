@@ -2,9 +2,8 @@
 
 ## Snowflake Cortex Features Demo Documentation
 
-![Solution Architecture](/assets/images/Solution Overview.png)
+![Solution Architecture]([/assets/images/Solution Overview.png)](https://github.com/mrecos/Snowflake/blob/main/AI_READY_Data_Pipeline/Solution%20Overview.png)
 
-![Screenshot of a comment on a GitHub issue showing an image, added in the Markdown, of an Octocat smiling and raising a tentacle.](https://myoctocat.com/assets/images/base-octocat.svg)
 
 ## Overview
 
