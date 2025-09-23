@@ -2,7 +2,7 @@
 
 ## Snowflake Cortex Features Demo Documentation
 
-![Solution Architecture]([/assets/images/Solution Overview.png)](https://github.com/mrecos/Snowflake/blob/main/AI_READY_Data_Pipeline/Solution%20Overview.png)
+![Solution Architecture](https://github.com/mrecos/Snowflake/blob/main/AI_READY_Data_Pipeline/Solution%20Overview.png)
 
 
 ## Overview
