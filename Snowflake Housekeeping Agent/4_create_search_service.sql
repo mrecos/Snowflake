@@ -100,8 +100,7 @@ SELECT SNOWFLAKE.CORTEX.SEARCH_PREVIEW(
     '{
         "query": "expensive long running high cost query optimization",
         "columns": ["QUERY_ID", "USER_NAME", "COST_CATEGORY", "PERFORMANCE_CATEGORY", "QUERY_SUMMARY"],
-        "limit": 3,
-        "filter": {"COST_CATEGORY": ["EXPENSIVE", "VERY_EXPENSIVE"]}
+        "limit": 3
     }'
 );
 
@@ -112,8 +111,7 @@ SELECT SNOWFLAKE.CORTEX.SEARCH_PREVIEW(
     '{
         "query": "error failed compilation timeout",
         "columns": ["QUERY_ID", "USER_NAME", "ERROR_CODE", "ERROR_MESSAGE", "QUERY_SUMMARY"],
-        "limit": 3,
-        "filter": {"EXECUTION_STATUS": ["FAIL", "INCIDENT"]}
+        "limit": 3
     }'
 );
 
@@ -146,10 +144,7 @@ SELECT SNOWFLAKE.CORTEX.SEARCH_PREVIEW(
     '{
         "query": "expensive query optimization performance tuning",
         "columns": ["QUERY_ID", "USER_NAME", "COST_CATEGORY", "QUERY_SUMMARY", "START_TIME"],
-        "limit": 5,
-        "filter": {
-            "COST_CATEGORY": ["EXPENSIVE", "VERY_EXPENSIVE", "MODERATE"]
-        }
+        "limit": 5
     }'
 );
 
