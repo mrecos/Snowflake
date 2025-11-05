@@ -1,0 +1,28 @@
+{
+  "agentName": "HACKTHON_SP_TEST_V1",
+  "agentDatabase": "SNOWFLAKE_INTELLIGENCE",
+  "agentSchema": "AGENTS",
+  "presets": [
+    {
+      "label": "Clustering health",
+      "prompt": "Show clustering health for SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY"
+    },
+    {
+      "label": "QAS eligibility",
+      "prompt": "Estimate QAS for last query"
+    },
+    {
+      "label": "Operator stats",
+      "prompt": "Show operator stats for the last 5 queries running over 2 minutes."
+    },
+    {
+      "label": "Search opt costs",
+      "prompt": "Estimate search optimization costs for SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY"
+    },
+    {
+      "label": "Top warehouses",
+      "prompt": "What are the top 5 most expensive warehouses this month?"
+    }
+  ]
+}
+

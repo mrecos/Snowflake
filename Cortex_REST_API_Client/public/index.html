@@ -1,0 +1,56 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SnowSage Demo</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <img src="/snow_sage1.png" alt="Logo" class="logo" />
+      <div class="title">SnowSage Demo</div>
+      <div class="status-indicator">
+        <span id="statusDot" class="dot red"></span>
+        <span id="statusText">Checking...</span>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="left">
+        <div class="card">
+          <h3>Presets</h3>
+          <div id="presetsContainer"></div>
+          <button id="btnVerifyAgent" class="btn secondary">Verify agent</button>
+        </div>
+      </section>
+      <section class="right">
+        <div class="card">
+          <label for="prompt">Ask a question</label>
+          <textarea id="prompt" rows="3" placeholder="Ask the agent about clustering, query performance, costs..."></textarea>
+          <button id="btnSend" class="btn primary">Send</button>
+        </div>
+
+        <div class="card">
+          <h3>Response</h3>
+          <div id="result" class="response-container">
+            <p>Ready. Ask a question to get started.</p>
+          </div>
+        </div>
+        <div class="card">
+          <details>
+            <summary style="cursor: pointer; color: var(--muted); font-size: 12px;">Show raw JSON</summary>
+            <pre id="resultRaw" class="code" style="max-height: 300px;">Ready.</pre>
+          </details>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+  </html>
+
+
