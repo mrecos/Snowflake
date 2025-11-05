@@ -10,56 +10,69 @@
     <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
   </head>
   <body>
-    <header class="topbar">
-      <img src="/snow_sage1.png" alt="Logo" class="logo" />
-      <div class="title">SnowSage Demo</div>
-      <div class="status-indicator">
-        <span id="statusDot" class="dot red"></span>
-        <span id="statusText">Checking...</span>
-      </div>
-    </header>
+    <!-- Status Indicator (Fixed Position) -->
+    <div class="status-indicator">
+      Status: <span class="status-text" id="statusText">Checking...</span>
+    </div>
 
     <main class="container">
-      <section class="left">
-        <div class="card">
-          <h3>Conversations</h3>
-          <button id="btnNewConversation" class="btn primary" style="width: 100%; margin-bottom: 12px;">+ New Conversation</button>
-          <div id="conversationHistory" class="conversation-list"></div>
-          <button id="btnClearHistory" class="btn secondary" style="width: 100%; margin-top: 12px; font-size: 11px;">Clear History</button>
-        </div>
+      <!-- Left Sidebar -->
+      <aside class="sidebar">
+        <div class="sidebar-branding" id="appBranding">Cortex Agent<br>REST API</div>
         
-        <div class="card">
-          <h3>Presets</h3>
+        <section class="sidebar-section">
+          <button id="btnNewConversation" class="btn new-chat">New Chat</button>
+        </section>
+        
+        <section class="sidebar-section">
+          <h2 class="sidebar-section-title">Conversations</h2>
+          <div id="conversationHistory" class="conversation-list"></div>
+          <button id="btnClearHistory" class="btn secondary">Clear History</button>
+        </section>
+        
+        <section class="sidebar-section">
+          <h2 class="sidebar-section-title">Presets</h2>
           <div id="presetsContainer"></div>
-          <button id="btnVerifyAgent" class="btn secondary">Verify agent</button>
-        </div>
-      </section>
-      <section class="right">
-        <div class="card">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <label for="prompt">Ask a question</label>
-            <span id="threadIndicator" style="font-size: 11px; color: var(--muted);"></span>
-          </div>
-          <textarea id="prompt" rows="3" placeholder="Ask the agent about clustering, query performance, costs..."></textarea>
-          <button id="btnSend" class="btn primary">Send</button>
+          <button id="btnVerifyAgent" class="btn ghost">Verify Agent</button>
+        </section>
+      </aside>
+      
+      <!-- Main Content Area -->
+      <section class="main-content">
+        <!-- Welcome Section (shown when no active conversation) -->
+        <div id="welcomeSection" class="welcome-section">
+          <h1 class="welcome-h1" id="welcomeH1">Good afternoon</h1>
+          <h2 class="welcome-h2">What insights can I help with?</h2>
         </div>
 
-        <div class="card">
-          <h3>Response</h3>
-          <div id="result" class="response-container">
-            <p>Ready. Ask a question to get started.</p>
+        <!-- Input Section -->
+        <div class="input-section">
+          <div class="input-label-row">
+            <label for="prompt" class="input-label">Ask A Question</label>
+            <span id="threadIndicator" class="thread-indicator"></span>
           </div>
-          <button id="scrollToBottom" class="scroll-to-bottom" title="Scroll to bottom">↓</button>
+          <div class="input-wrapper">
+            <textarea id="prompt" rows="3" placeholder="Ask about warehouse costs, query performance, or user credits..."></textarea>
+            <button id="btnSend" class="btn primary" title="Send message"></button>
+          </div>
         </div>
-        <div class="card">
-          <details>
-            <summary style="cursor: pointer; color: var(--muted); font-size: 12px;">Show raw JSON</summary>
-            <pre id="resultRaw" class="code" style="max-height: 300px;">Ready.</pre>
-          </details>
+
+        <!-- Chat Messages Container -->
+        <div id="result" class="response-container" style="display: none;">
+          <!-- Messages will be appended here -->
         </div>
+        
+        <!-- Raw JSON (Collapsible) -->
+        <details>
+          <summary>Show Raw JSON</summary>
+          <pre id="resultRaw" class="code">Ready.</pre>
+        </details>
       </section>
     </main>
 
+    <!-- Scroll to Bottom Button -->
+    <button id="scrollToBottom" class="scroll-to-bottom" title="Scroll to bottom">↓</button>
+    
     <script src="/app.js"></script>
   </body>
   </html>

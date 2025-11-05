@@ -14,11 +14,12 @@ async function j(url, opts) {
 // ===== DOM ELEMENTS =====
 const resultEl = document.getElementById('result');
 const resultRawEl = document.getElementById('resultRaw');
-const statusDot = document.getElementById('statusDot');
 const statusText = document.getElementById('statusText');
 const threadIndicator = document.getElementById('threadIndicator');
 const conversationHistoryEl = document.getElementById('conversationHistory');
 const scrollToBottomBtn = document.getElementById('scrollToBottom');
+const welcomeSection = document.getElementById('welcomeSection');
+const welcomeH1 = document.getElementById('welcomeH1');
 
 // ===== STATE =====
 let config = null; // Loaded from config.json
@@ -26,6 +27,87 @@ let currentConversation = null; // { id, thread_id, parent_message_id, title, me
 const MAX_CONVERSATIONS = 20;
 const STORAGE_PREFIX = 'snowsage_conversation_';
 const STORAGE_LIST_KEY = 'snowsage_conversation_list';
+
+// ===== WELCOME GREETING =====
+
+function updateWelcomeGreeting() {
+  const hour = new Date().getHours();
+  let greeting;
+  
+  if (hour < 12) {
+    greeting = 'Good morning';
+  } else if (hour < 17) {
+    greeting = 'Good afternoon';
+  } else {
+    greeting = 'Good evening';
+  }
+  
+  welcomeH1.textContent = greeting;
+}
+
+// ===== THINKING INDICATOR =====
+
+let thinkingMessageInterval = null;
+const thinkingMessages = [
+  'Agent is thinking',
+  'Analyzing your request',
+  'Querying Snowflake',
+  'Building SQL queries',
+  'Executing queries, hold tight',
+  'Processing results',
+  'Gathering insights',
+  'Almost there'
+];
+
+function showThinkingIndicator() {
+  const indicator = document.createElement('div');
+  indicator.className = 'thinking-indicator';
+  indicator.id = 'thinkingIndicator';
+  
+  const text = document.createElement('span');
+  text.id = 'thinkingText';
+  text.textContent = thinkingMessages[0];
+  
+  const dots = document.createElement('div');
+  dots.className = 'thinking-dots';
+  dots.innerHTML = '<span></span><span></span><span></span>';
+  
+  indicator.appendChild(text);
+  indicator.appendChild(dots);
+  
+  resultEl.appendChild(indicator);
+  scrollToBottom(true);
+  
+  // Rotate through messages every 8 seconds with fade effect
+  let messageIndex = 0;
+  thinkingMessageInterval = setInterval(() => {
+    messageIndex = (messageIndex + 1) % thinkingMessages.length;
+    const textEl = document.getElementById('thinkingText');
+    if (textEl) {
+      // Fade out
+      textEl.style.opacity = '0';
+      
+      // Change text and fade in after transition
+      setTimeout(() => {
+        textEl.textContent = thinkingMessages[messageIndex];
+        textEl.style.opacity = '1';
+      }, 500);
+    }
+  }, 8000);
+}
+
+function hideThinkingIndicator() {
+  // Clear the message rotation interval
+  if (thinkingMessageInterval) {
+    clearInterval(thinkingMessageInterval);
+    thinkingMessageInterval = null;
+  }
+  
+  const indicator = document.getElementById('thinkingIndicator');
+  if (indicator) {
+    indicator.remove();
+  }
+}
 
 // ===== SCROLL HELPERS =====
 
@@ -155,11 +237,14 @@ function createNewConversation() {
   updateThreadIndicator();
   renderConversationHistory();
   
-  // Clear display
-  resultEl.innerHTML = '<p style="text-align: center; color: var(--muted); padding: 40px 20px;">Ready. Ask a question to start a new conversation.</p>';
+  // Show welcome section, hide chat
+  welcomeSection.style.display = 'block';
+  resultEl.style.display = 'none';
+  resultEl.innerHTML = '';
   resultRawEl.textContent = 'Ready.';
   document.getElementById('prompt').value = '';
   scrollToBottomBtn.classList.remove('visible');
+  updateWelcomeGreeting();
 }
 
 // Load existing conversation
@@ -182,11 +267,19 @@ function switchToConversation(id) {
 // Display all messages in current conversation
 function displayConversationMessages() {
   if (!currentConversation || currentConversation.messages.length === 0) {
-    resultEl.innerHTML = '<p style="text-align: center; color: var(--muted); padding: 40px 20px;">No messages in this conversation yet.</p>';
+    // Show welcome section, hide chat
+    welcomeSection.style.display = 'block';
+    resultEl.style.display = 'none';
+    resultEl.innerHTML = '';
     resultRawEl.textContent = '';
     scrollToBottomBtn.classList.remove('visible');
+    updateWelcomeGreeting();
     return;
   }
+  
+  // Hide welcome section, show chat
+  welcomeSection.style.display = 'none';
+  resultEl.style.display = 'block';
   
   // Clear the display
   resultEl.innerHTML = '';
@@ -219,9 +312,11 @@ function updateThreadIndicator() {
   
   const isNew = currentConversation.messages.length === 0;
   if (isNew) {
-    threadIndicator.textContent = 'New conversation';
+    threadIndicator.textContent = '';
   } else {
-    threadIndicator.textContent = `Thread ${currentConversation.thread_id || 0} • ${currentConversation.messages.length} message(s)`;
+    const msgCount = currentConversation.messages.length;
+    const turnCount = Math.floor(msgCount / 2);
+    threadIndicator.textContent = `${msgCount} message${msgCount !== 1 ? 's' : ''} • ${turnCount} turn${turnCount !== 1 ? 's' : ''}`;
   }
 }
 
@@ -231,7 +326,10 @@ function renderConversationHistory() {
   
   const list = getConversationList();
   
-  list.forEach(id => {
+  // Limit to most recent 5 conversations
+  const recentList = list.slice(0, 5);
+  
+  recentList.forEach(id => {
     const conv = loadConversation(id);
     if (!conv) return;
     
@@ -310,6 +408,12 @@ async function loadConfig() {
     config = await resp.json();
     console.log('[config] Loaded:', config);
     
+    // Set app branding from config (default to "Cortex Agent<br>REST API")
+    const brandingEl = document.getElementById('appBranding');
+    if (brandingEl && config.appTitle) {
+      brandingEl.innerHTML = config.appTitle;
+    }
+    
     // Generate preset buttons
     const container = document.getElementById('presetsContainer');
     config.presets.forEach(preset => {
@@ -342,10 +446,10 @@ function appendUserMessage(text, timestamp = null) {
   
   const header = document.createElement('div');
   header.className = 'message-header';
-  header.innerHTML = '<span class="icon">👤</span><span>You</span>';
+  header.textContent = 'You';
   if (timestamp) {
     const time = new Date(timestamp).toLocaleTimeString();
-    header.innerHTML += ` <span>• ${time}</span>`;
+    header.textContent += ` • ${time}`;
   }
   
   const content = document.createElement('div');
@@ -370,10 +474,10 @@ function appendAssistantMessage(events, timestamp = null) {
   
   const header = document.createElement('div');
   header.className = 'message-header';
-  header.innerHTML = '<span class="icon">🤖</span><span>Agent</span>';
+  header.textContent = 'Agent';
   if (timestamp) {
     const time = new Date(timestamp).toLocaleTimeString();
-    header.innerHTML += ` <span>• ${time}</span>`;
+    header.textContent += ` • ${time}`;
   }
   
   const content = document.createElement('div');
@@ -608,15 +712,15 @@ async function checkHealth() {
   try {
     const resp = await j('/api/health');
     if (resp.ok) {
-      statusDot.className = 'dot green';
       statusText.textContent = 'Connected';
+      statusText.className = 'status-text connected';
     } else {
-      statusDot.className = 'dot red';
-      statusText.textContent = 'Config missing: ' + resp.missing.join(', ');
+      statusText.textContent = 'Config Error';
+      statusText.className = 'status-text';
     }
   } catch (e) {
-    statusDot.className = 'dot red';
-    statusText.textContent = 'Server offline';
+    statusText.textContent = 'Offline';
+    statusText.className = 'status-text';
   }
 }
 
@@ -655,30 +759,42 @@ document.getElementById('btnClearHistory').onclick = () => {
 document.getElementById('btnVerifyAgent').onclick = async () => {
   if (!config) return;
   
-  statusDot.className = 'dot yellow';
-  statusText.textContent = 'Checking agent...';
+  // Show result area, hide welcome
+  welcomeSection.style.display = 'none';
+  resultEl.style.display = 'block';
+  
+  statusText.textContent = 'Checking...';
+  statusText.className = 'status-text';
   resultEl.innerHTML = `<p>Verifying ${config.agentName} exists...</p>`;
   
   try {
     const resp = await j(`/api/agent/${config.agentName}/describe`);
     resultRawEl.textContent = JSON.stringify(resp, null, 2);
     if (resp.ok) {
-      statusDot.className = 'dot green';
-      statusText.textContent = 'Agent found';
-      resultEl.innerHTML = '<p style="color: var(--brand);"><strong>✓ Agent verified</strong></p><p style="font-size: 12px;">Agent: ' + config.agentName + '<br>Database: ' + resp.result.database_name + '<br>Schema: ' + resp.result.schema_name + '</p>';
+      statusText.textContent = 'Connected';
+      statusText.className = 'status-text connected';
+      resultEl.innerHTML = '<p style="color: var(--mid-blue);"><strong>✓ Agent Verified</strong></p><p>Agent: ' + config.agentName + '<br>Database: ' + resp.result.database_name + '<br>Schema: ' + resp.result.schema_name + '</p>';
     } else {
-      statusDot.className = 'dot red';
-      statusText.textContent = 'Agent not found';
+      statusText.textContent = 'Error';
+      statusText.className = 'status-text';
       const errorCode = resp._status || 'Unknown';
       const errorMsg = resp.error || 'Agent not found';
-      resultEl.innerHTML = `<p style="color: #a00;"><strong>Error ${errorCode}:</strong> Agent not found</p><p style="font-size: 12px;">${errorMsg}</p>`;
+      resultEl.innerHTML = `<p style="color: var(--medium-gray);"><strong>Error ${errorCode}:</strong> Agent not found</p><p>${errorMsg}</p>`;
     }
   } catch (e) {
-    statusDot.className = 'dot red';
     statusText.textContent = 'Error';
-    resultEl.innerHTML = `<p style="color: #a00;">Error: ${String(e)}</p>`;
+    statusText.className = 'status-text';
+    resultEl.innerHTML = `<p style="color: var(--medium-gray);">Error: ${String(e)}</p>`;
   }
 };
+
+// Handle Enter key in textarea (Shift+Enter for new line, Enter to send)
+document.getElementById('prompt').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault(); // Prevent new line
+    document.getElementById('btnSend').click();
+  }
+});
 
 // Send button - calls the agent with thread tracking
 document.getElementById('btnSend').onclick = async () => {
@@ -696,7 +812,6 @@ document.getElementById('btnSend').onclick = async () => {
   }
   
   const btnSend = document.getElementById('btnSend');
-  const originalBtnText = btnSend.innerHTML;
   
   // Add user message to conversation immediately
   const userMessage = {
@@ -709,17 +824,23 @@ document.getElementById('btnSend').onclick = async () => {
   // Set title from first message
   if (currentConversation.messages.length === 1) {
     currentConversation.title = generateTitle(prompt);
+    // Hide welcome section, show chat area for first message
+    welcomeSection.style.display = 'none';
+    resultEl.style.display = 'block';
   }
   
   // Show user message in UI immediately
   appendUserMessage(prompt, userMessage.timestamp);
   
+  // Show thinking indicator
+  showThinkingIndicator();
+  
   // Clear prompt and show thinking state
   document.getElementById('prompt').value = '';
-  statusDot.className = 'dot yellow';
-  statusText.textContent = 'Running...';
+  statusText.textContent = 'Processing...';
+  statusText.className = 'status-text';
   btnSend.disabled = true;
-  btnSend.innerHTML = '<span class="spinner"></span>Sending...';
+  btnSend.style.opacity = '0.5';
   
   try {
     // Build conversation history for context (simplified format for API)
@@ -763,32 +884,36 @@ document.getElementById('btnSend').onclick = async () => {
       // Save conversation to localStorage
       saveCurrentConversation();
       
-      // Append the assistant response to the chat
+      // Hide thinking indicator and append the assistant response
+      hideThinkingIndicator();
       appendAssistantMessage(resp.events, assistantMessage.timestamp);
       
       // Update UI
-      statusDot.className = 'dot green';
-      statusText.textContent = 'Completed';
+      statusText.textContent = 'Connected';
+      statusText.className = 'status-text connected';
       updateThreadIndicator();
       renderConversationHistory();
     } else if (resp.ok) {
+      hideThinkingIndicator();
       resultEl.innerHTML = '<p>Response received but no events found.</p>';
-      statusDot.className = 'dot green';
-      statusText.textContent = 'Completed';
+      statusText.textContent = 'Connected';
+      statusText.className = 'status-text connected';
     } else {
+      hideThinkingIndicator();
       const errorCode = resp._status || 'Unknown';
       const errorMsg = resp.error || 'Unknown error';
-      resultEl.innerHTML = `<p style="color: #a00;"><strong>Error ${errorCode}:</strong> ${errorMsg}</p>`;
-      statusDot.className = 'dot red';
-      statusText.textContent = 'Error - check auth';
+      resultEl.innerHTML = `<p style="color: var(--medium-gray);"><strong>Error ${errorCode}:</strong> ${errorMsg}</p>`;
+      statusText.textContent = 'Error';
+      statusText.className = 'status-text';
       
       // Remove the user message since it failed
       currentConversation.messages.pop();
     }
   } catch (e) {
-    statusDot.className = 'dot red';
+    hideThinkingIndicator();
     statusText.textContent = 'Error';
-    resultEl.innerHTML = `<p style="color: #a00;">Error: ${String(e)}</p>`;
+    statusText.className = 'status-text';
+    resultEl.innerHTML = `<p style="color: var(--medium-gray);">Error: ${String(e)}</p>`;
     resultRawEl.textContent = String(e);
     
     // Remove the user message since it failed
@@ -796,7 +921,7 @@ document.getElementById('btnSend').onclick = async () => {
   } finally {
     // Re-enable button
     btnSend.disabled = false;
-    btnSend.innerHTML = originalBtnText;
+    btnSend.style.opacity = '1';
   }
 };
 

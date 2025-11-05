@@ -1,5 +1,357 @@
 # Changelog — Snowflake Cortex Agent REST API Client
 
+## v3.5 - Dynamic Thinking Messages & Enter Key (November 5, 2025)
+
+### Enhancements
+
+**Dynamic Thinking Indicator:**
+- Rotating progress messages that change every 8 seconds
+- 8 different messages: "Agent is thinking", "Analyzing your request", "Querying Snowflake", "Building SQL queries", "Executing queries, hold tight", "Processing results", "Gathering insights", "Almost there"
+- Smooth fade transitions (500ms) between messages
+- Reduces anxiety during long-running queries
+- Auto-cycles through messages until response received
+- Proper cleanup (no memory leaks)
+
+**Keyboard Shortcut:**
+- Press **Enter** to submit question (standard chat behavior)
+- **Shift+Enter** for new line in textarea
+- Faster workflow, no mouse needed
+
+### Technical Changes
+
+**`app.js`:**
+- Added `thinkingMessages` array (8 messages)
+- Added `thinkingMessageInterval` for rotation
+- Updated `showThinkingIndicator()` with setInterval and fade logic
+- Updated `hideThinkingIndicator()` to clear interval
+- Added Enter key event listener on prompt textarea
+
+**`styles.css`:**
+- Added `#thinkingText` transition for smooth opacity changes
+
+---
+
+## v3.4 - Final Detail Polish (November 5, 2025)
+
+### Improvements
+
+**Larger App Title:**
+- Branding text increased from 16pt → 18pt
+- More prominent and easier to read
+- Increased bottom margin (8px → 16px)
+
+**Subdued Debug Info:**
+- "Show Raw JSON" made much less prominent
+- Font: 14pt bold → 12pt normal
+- Opacity: 100% → 60% (reveals on hover)
+- Background: Light gray box → transparent
+- Doesn't compete with main content
+
+**Better Thread Indicator:**
+- Replaced confusing "Thread 0" with useful info
+- Shows: "X messages • Y turns" (e.g., "4 messages • 2 turns")
+- Turn = one Q&A exchange (more intuitive)
+
+**Optimized Table Display:**
+- Table data: 16pt → 14pt (better density)
+- Padding reduced (12px → 10px)
+- More information visible per screen
+
+**Table Scroll Indicators:**
+- Visible scrollbar (8px height, styled)
+- Subtle shadow hint on right edge
+- Clear indication of horizontal scroll
+
+### Technical Changes
+
+**`styles.css`:**
+- `.sidebar-branding`: 16pt → 18pt
+- `summary`: completely redesigned (subtle, transparent)
+- `table td`: 14pt with reduced padding
+- Added scrollbar styling (`::-webkit-scrollbar`)
+- Added shadow hint on tables
+
+**`app.js`:**
+- Updated `updateThreadIndicator()` to show message/turn count
+
+---
+
+## v3.3 - Configurable Branding & Enhanced Feedback (November 5, 2025)
+
+### Major Features
+
+**Configurable App Title:**
+- New `appTitle` field in `config.json`
+- Customize branding: e.g., "Acme Corp<br>AI Assistant"
+- HTML allowed (use `<br>` for line breaks)
+- Perfect for white-labeling and customer deployments
+- Default: "Cortex Agent<br>REST API"
+
+**Animated Thinking Indicator:**
+- Shows "Agent is thinking..." with animated pulsing dots
+- Three blue dots pulse in sequence
+- Appears while processing, disappears when done
+- Styled to match agent message bubbles
+
+**Wider Sidebar:**
+- Width: 280px → 320px
+- Prevents text truncation
+- Conversation titles now wrap instead of cutting off
+
+**Enhanced Conversation Items:**
+- Text wraps on multiple lines
+- Subtle gray background for each item
+- Visible border on hover and when active
+- 8px spacing between items
+- Limited to **5 most recent conversations** displayed
+
+**Agent Text Size:**
+- Reduced from 18pt → 16pt
+- More comfortable reading
+- Better balance with UI
+
+**Wider Main Content:**
+- Horizontal padding: 120px → 100px
+- Max-width: 1400px → 1600px
+- More breathing room for content
+
+### Technical Changes
+
+**`config.json`:**
+- Added `appTitle` property
+
+**`index.html`:**
+- Logo replaced with `<div id="appBranding">`
+
+**`app.js`:**
+- Added `showThinkingIndicator()` and `hideThinkingIndicator()`
+- Updated `loadConfig()` to set app title from config
+- Updated `renderConversationHistory()` to limit to 5 items
+- Integrated thinking indicator in send flow
+
+**`styles.css`:**
+- Sidebar: 280px → 320px
+- Added `.sidebar-branding` styles
+- Added `.thinking-indicator` with animated dots
+- Added `@keyframes thinking-pulse`
+- Updated `.conversation-item` with wrapping, backgrounds, borders
+- `.message-content`: 18pt → 16pt
+- `.main-content`: wider padding and max-width
+
+**New File:**
+- `CONFIG_CUSTOMIZATION.md` - Complete customization guide
+
+---
+
+## v3.2 - Professional Polish (November 5, 2025)
+
+### Improvements
+
+**Enhanced Status Indicator:**
+- Added "Status:" prefix for clarity
+- Success state in green (#22C55E, bold)
+- Top-right fixed position badge
+
+**Redesigned Sidebar:**
+- Width: 240px → 280px
+- Section headers: 14pt Mid-Blue, ALL CAPS
+- Navigation items: 16pt (larger, easier to read)
+- Active conversation: Bold black text on light gray
+
+**New Chat Button:**
+- Clean style: `+ New Chat`
+- Blue + icon (24pt Snowflake Blue)
+- Text: 16pt Medium Gray
+- Transparent background, hover effect
+
+**Verify Agent Button:**
+- Ghost button style (blue outline, transparent)
+- Stands out from other buttons
+- Hover: light blue tint
+
+**Inline Send Button:**
+- Moved inside textarea (bottom-right corner)
+- 48x48px square with arrow icon (➤)
+- Saves vertical space
+- Modern chat interface pattern
+
+**Input Styling:**
+- Border-radius: 8px → 12px (more inviting)
+- Focus: Blue glow effect
+- Better placeholder text
+
+**Message Bubbles:**
+- Agent messages: enhanced border and background
+- Tables: Better overflow handling, bold warehouse names
+- Lists: Bold text for key items
+
+### Technical Changes
+
+**`styles.css`:**
+- Updated `.status-indicator` and `.status-text`
+- Added `.new-chat` button style with `::before` for + icon
+- Added `.ghost` button style
+- Redesigned `.btn.primary` as absolute positioned
+- Added `.input-wrapper` for relative positioning
+- Updated `.message-agent .message-bubble` with border
+- Enhanced table and list content styles
+
+**`index.html`:**
+- Added "Status:" prefix
+- New Chat: `class="btn new-chat"`
+- Verify Agent: `class="btn ghost"`
+- Wrapped textarea and button in `.input-wrapper`
+
+**`app.js`:**
+- Status updates now add `.connected` class
+- Button state uses opacity instead of innerHTML
+- Updated status messages throughout
+
+---
+
+## v3.1 - All-White Minimalist UI (November 5, 2025)
+
+### Complete Design Overhaul
+
+**Philosophy:** Clean, airy interface inspired by Snowflake Intelligence with extreme white space and strategic blue accents.
+
+**All-White Backgrounds:**
+- Entire interface uses white (#FFFFFF) backgrounds
+- Sidebar, header, main content - everything white
+- No colored background panels
+
+**Strategic Blue Accents:**
+- Snowflake Blue (#29B5E8) used ONLY for text accents
+- Primary accent: H2 welcome message
+- Send button, scroll button, message borders
+- NOT used for backgrounds
+
+**Extreme White Space:**
+- Main content: 80px vertical, 120px horizontal padding
+- Generous spacing between all elements
+- 32px between messages
+- Creates "airy, breathable" feel
+
+**Welcome Section:**
+- Dynamic greeting: "Good morning/afternoon/evening"
+- H1: 26pt Bold Black (greeting)
+- H2: 44pt Bold Snowflake Blue ("What insights can I help with?")
+- Shows when no messages, hides when conversation starts
+
+**Flat Design:**
+- No border-radius on most elements
+- No box-shadows
+- Sharp corners
+- Clean, modern appearance
+
+### Layout Changes
+
+**Before:** Blue header + blue sidebar + white main content
+
+**After:** No header, white sidebar, white main content
+
+**Header Removed:**
+- Logo and title moved to sidebar top
+- Status indicator moved to fixed top-right position
+
+**Sidebar Redesign:**
+- White background with 1px subtle border
+- 240px width
+- Logo at top (32px)
+- Text-based navigation
+
+**Main Content:**
+- White background
+- 80px/120px padding
+- Max-width 1400px, centered
+- Welcome section visible initially
+
+### Technical Changes
+
+**`styles.css`:**
+- Complete rewrite (~500 lines)
+- All backgrounds to white
+- Updated typography (44pt, 26pt, 18pt)
+- Flat design (removed shadows, border-radius)
+- Added welcome section styles
+- Updated message bubble styles
+
+**`index.html`:**
+- Removed `<header class="app-header">`
+- Added status indicator (fixed position)
+- Restructured sidebar
+- Added welcome section
+- Semantic HTML5 structure
+
+**`app.js`:**
+- Added `updateWelcomeGreeting()` function
+- Updated `createNewConversation()` to show welcome
+- Updated `displayConversationMessages()` to toggle welcome/chat
+- Dynamic greeting based on time of day
+
+---
+
+## v3.0 - Snowflake Brand Guidelines (November 5, 2025)
+
+### Strict Brand Compliance
+
+**Color Palette:**
+- Primary: Snowflake Blue (#29B5E8)
+- Mid-Blue: #11567F
+- Black: #000000
+- Medium Gray: #5B5B5B
+- White: #FFFFFF
+- Removed: All secondary colors (orange, purple, pink)
+
+**Typography:**
+- Font: Arial, sans-serif (throughout)
+- App Title: 44pt Bold
+- Section Titles: 26pt Bold
+- Body Text: 18pt Regular
+- Line height: 1.15
+- Paragraph spacing: 10pt after
+
+**Accessibility:**
+- All text high contrast (WCAG AA/AAA)
+- No white text on light backgrounds
+- Snowflake Blue only for text ≥28pt
+- Clear visual hierarchy
+
+### Design Changes
+
+**Blue Header:**
+- Full-width Snowflake Blue background
+- "CORTEX AI DEMO" title (44pt Bold White)
+- Colorstack style (mix of white and black letters)
+
+**Blue Sidebar:**
+- Snowflake Blue background
+- White text throughout
+- Section titles in white
+- Buttons with white borders
+
+**Main Content:**
+- White background
+- Black section titles (26pt Bold)
+- Medium Gray body text (18pt)
+- Tables: Blue headers, gray data
+
+### Technical Changes
+
+**`styles.css`:**
+- Complete CSS rewrite
+- CSS custom properties for colors
+- Arial font throughout
+- Proper typography hierarchy
+- High contrast color pairings
+
+**`index.html`:**
+- Added blue header with title
+- Updated sidebar structure
+- Updated button classes
+
+---
+
 ## v2.1 - Chat-Style UI (November 2025)
 
 ### Major UI Improvement

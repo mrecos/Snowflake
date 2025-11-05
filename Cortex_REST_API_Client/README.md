@@ -11,15 +11,18 @@ Reference: [Cortex Agents Run API](https://docs.snowflake.com/en/user-guide/snow
 This application provides a clean, minimal web interface for interacting with any Snowflake Cortex Agent. It acts as a bridge between browser and Snowflake's REST API, handling authentication securely on the backend while providing an intuitive chat-like interface.
 
 **✨ Key Features:**
+- **Modern minimalist UI** - Clean, airy design with all-white backgrounds and strategic blue accents
 - **Chat-style interface** - Natural conversation flow with message bubbles (like ChatGPT/Claude)
-- **Fully configurable** - Agent name and preset questions via `public/config.json`
+- **Fully configurable** - Agent name, app title, and preset questions via `public/config.json`
 - **Secure** - PAT token stored in backend `.env`, never exposed to browser
-- **Multi-turn conversations** - Maintains thread context for follow-up questions
-- **Conversation history** - Persists chats in browser localStorage (max 20)
-- **Rich rendering** - Formatted text, data tables, and interactive Vega-Lite charts
-- **Instant feedback** - User messages appear immediately while agent processes
+- **Multi-turn conversations** - Maintains context with full conversation history
+- **Conversation history** - Shows 5 most recent chats in sidebar with text wrapping
+- **Rich rendering** - Formatted text, data tables (with scroll hints), and interactive Vega-Lite charts
+- **Dynamic feedback** - Rotating thinking messages ("Querying Snowflake...", "Processing results...", etc.)
+- **Keyboard shortcuts** - Press Enter to send, Shift+Enter for new line
+- **Instant display** - User messages appear immediately while agent processes
 - **Shareable** - Coworkers just edit 2 config files, no code changes needed
-- **Professional UI** - SnowSage branding with blue color scheme (#29B5E8)
+- **Brand customizable** - Custom app title for white-labeling (e.g., "Acme Corp AI Assistant")
 
 ---
 
@@ -62,12 +65,12 @@ Cortex_REST_API_Client/
 │   └── .env                  # Server config (NOT in git)
 │
 ├── public/
-│   ├── index.html            # UI with conversation history sidebar
-│   ├── styles.css            # Blue color scheme (#29B5E8)
-│   ├── app.js                # Frontend logic (localStorage, threading)
-│   ├── config.json           # Agent name and presets (customize this!)
+│   ├── index.html            # Minimalist UI with sidebar navigation
+│   ├── styles.css            # All-white design with Snowflake Blue accents
+│   ├── app.js                # Frontend logic (conversations, dynamic feedback)
+│   ├── config.json           # Agent name, app title, and presets (customize!)
 │   ├── config.example.json   # Example config template
-│   └── snow_sage1.png        # Logo image
+│   └── snow_sage1.png        # Logo image (optional)
 │
 ├── DEPLOYMENT.md             # Setup and deployment guide
 └── README.md                 # This file
@@ -114,36 +117,47 @@ Minimal Express proxy that:
 
 ### `public/index.html`
 
-Chat-style UI with:
-- SnowSage logo and branding
-- Status indicator lights (green/yellow/red)
-- Conversation history sidebar (left) for switching between conversations
-- Preset buttons for common questions
-- Question input textarea with thread indicator
-- Chat-style message display (user messages right, agent messages left)
-- Message bubbles with timestamps and role indicators
-- Auto-scroll with scroll-to-bottom button
-- Rich rendering in messages (formatted text, tables, charts)
-- Raw JSON debug view (collapsible)
+Clean, minimalist UI with:
+- **All-white design** with strategic Snowflake Blue accents
+- **Customizable branding** - configurable app title (default: "Cortex Agent REST API")
+- **Status indicator** (top-right) showing connection state with success green color
+- **Left sidebar (320px)** - white background with subtle borders
+  - Conversation history (5 most recent, with text wrapping)
+  - Preset question buttons
+  - "Verify Agent" ghost button (blue outline)
+- **Main content area** - wide, airy layout (max 1600px)
+  - Dynamic greeting ("Good morning/afternoon/evening")
+  - Question input with inline send button
+  - Chat message display (user right, agent left)
+  - Message bubbles with light backgrounds and colored left borders
+  - Rotating thinking indicator ("Agent is thinking...", "Querying Snowflake...", etc.)
+  - Auto-scroll with floating button
+  - Tables with visible scrollbars and shadow hints
+- **Keyboard shortcuts** - Enter to send, Shift+Enter for new line
+- **Subdued debug view** - "Show Raw JSON" (subtle, reveals on hover)
 
 ### `public/app.js`
 
 Frontend logic:
 - Auto-checks health on page load
-- Loads configuration from `config.json`
-- Manages conversation history in localStorage (max 20 conversations)
-- Handles thread_id/parent_message_id for multi-turn conversations
-- Chat-style message rendering (appendUserMessage, appendAssistantMessage)
-- Auto-scroll to latest message with scroll detection
-- Renders responses with markdown, tables, and Vega-Lite charts
+- Loads configuration from `config.json` (including custom app title)
+- Manages conversation history in localStorage (shows 5 most recent)
+- Full conversation history sent to agent for context (not just thread IDs)
+- Chat-style message rendering with animated thinking indicator
+- Dynamic thinking messages that rotate every 8 seconds
+- Auto-scroll to latest message with floating scroll button
+- Keyboard shortcuts (Enter to send, Shift+Enter for new line)
+- Renders responses with markdown, tables (with scroll hints), and Vega-Lite charts
 - Instant user message display for immediate feedback
-- Updates status indicator during processing
+- Updates status indicator with success green color
+- Thread indicator shows message count and conversation turns
 
 ### `public/config.json`
 
 User-facing configuration:
 ```json
 {
+  "appTitle": "Cortex Agent<br>REST API",
   "agentName": "YOUR_AGENT_NAME",
   "agentDatabase": "YOUR_DB",
   "agentSchema": "YOUR_SCHEMA",
@@ -157,11 +171,16 @@ User-facing configuration:
 ```
 
 **Customization:**
+- `appTitle`: Custom branding text (HTML allowed, use `<br>` for line breaks)
+  - Default: "Cortex Agent<br>REST API"
+  - Example: "Acme Corp<br>AI Assistant" for white-labeling
 - `agentName`: Your agent's name (must match the agent in Snowflake)
 - `agentDatabase`, `agentSchema`: Location of your agent
 - `presets`: Array of preset questions
   - `label`: Button text shown in UI
   - `prompt`: Question text sent to agent when clicked
+
+See [CONFIG_CUSTOMIZATION.md](./CONFIG_CUSTOMIZATION.md) for advanced customization options.
 
 ---
 
@@ -341,9 +360,69 @@ See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed setup instructions.
 
 **TL;DR:**
 1. Configure `backend/.env` with Snowflake credentials
-2. Configure `public/config.json` with your agent name and presets
+2. Configure `public/config.json` with your agent name, app title, and presets
 3. `cd backend && npm install && npm start`
 4. Open `http://localhost:5173`
+5. Press Enter to send questions, Shift+Enter for multi-line
+
+---
+
+## Version History
+
+**v3.5 (Current)** - Dynamic Thinking Messages & Enter Key
+- Rotating thinking messages (8 different messages, updates every 8s)
+- Enter key to submit, Shift+Enter for new line
+- Smooth fade transitions between messages
+
+**v3.4** - Final Detail Polish
+- Larger app title branding (18pt)
+- Subdued "Show Raw JSON" (60% opacity, reveals on hover)
+- Fixed thread indicator (shows "X messages • Y turns" instead of "Thread 0")
+- Smaller table text (14pt for better density)
+- Visible scrollbar and shadow hints for tables
+
+**v3.3** - Configurable Branding & Enhanced Feedback
+- Configurable `appTitle` in config.json for white-labeling
+- Animated thinking indicator with pulsing dots
+- Wider sidebar (320px) with text wrapping
+- Conversation items with subtle backgrounds and borders
+- Limited to 5 most recent conversations displayed
+
+**v3.2** - Professional Polish
+- Ghost button for "Verify Agent" (blue outline, transparent)
+- Send button moved inside textarea (inline, bottom-right)
+- Status indicator with success green color
+- Larger navigation text (16pt)
+- Bold active conversation highlighting
+
+**v3.1** - All-White Minimalist UI
+- Complete redesign with all-white backgrounds
+- Strategic Snowflake Blue accents (text only, not backgrounds)
+- Extreme white space (80px/120px padding)
+- Dynamic greeting ("Good morning/afternoon/evening")
+- Prominent H2 in Snowflake Blue
+
+**v3.0** - Snowflake Brand Guidelines
+- Strict color palette compliance
+- Arial font throughout
+- Proper typography hierarchy (44pt/26pt/18pt)
+- High contrast for accessibility
+
+**v2.1** - Chat-Style UI
+- Message bubbles (user right, agent left)
+- Scroll-to-bottom button
+- Instant user message display
+
+**v2.0** - Multi-Turn Conversations
+- Full conversation history sent for context
+- localStorage persistence
+- Conversation switching in sidebar
+
+**v1.0** - Initial Release
+- Basic agent interaction
+- Single-turn conversations
+
+See [CHANGELOG.md](./CHANGELOG.md) for detailed version history.
 
 ---
 

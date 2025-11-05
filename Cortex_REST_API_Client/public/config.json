@@ -1,27 +1,28 @@
 {
+  "appTitle": "Cortex Agent<br>REST API",
   "agentName": "HACKTHON_SP_TEST_V1",
   "agentDatabase": "SNOWFLAKE_INTELLIGENCE",
   "agentSchema": "AGENTS",
   "presets": [
     {
-      "label": "Clustering health",
-      "prompt": "Show clustering health for SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY"
+      "label": "Explore Table clustering health",
+      "prompt": "Show clustering health for top 5 largest tables."
     },
     {
-      "label": "QAS eligibility",
-      "prompt": "Estimate QAS for last query"
+      "label": "How to benefit from QAS eligibility",
+      "prompt": "Estimate QAS for top 5 queries running over 2 minutes"
     },
     {
-      "label": "Operator stats",
+      "label": "Retrieve Query operator stats",
       "prompt": "Show operator stats for the last 5 queries running over 2 minutes."
     },
     {
-      "label": "Search opt costs",
-      "prompt": "Estimate search optimization costs for SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY"
+      "label": "Estimate search optimization costs",
+      "prompt": "Estimate search optimization costs for top 5 most queried tables."
     },
     {
-      "label": "Top warehouses",
-      "prompt": "What are the top 5 most expensive warehouses this month?"
+      "label": "Detail top warehouses",
+      "prompt": "What are the top 5 most expensive warehouses this month and how can I optimize them?"
     }
   ]
 }
