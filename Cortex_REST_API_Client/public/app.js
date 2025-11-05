@@ -1,3 +1,4 @@
+// ===== UTILITIES =====
 async function j(url, opts) {
   const r = await fetch(url, opts);
   const t = await r.text();
@@ -10,14 +11,286 @@ async function j(url, opts) {
   }
 }
 
+// ===== DOM ELEMENTS =====
 const resultEl = document.getElementById('result');
 const resultRawEl = document.getElementById('resultRaw');
 const statusDot = document.getElementById('statusDot');
 const statusText = document.getElementById('statusText');
+const threadIndicator = document.getElementById('threadIndicator');
+const conversationHistoryEl = document.getElementById('conversationHistory');
 
-let config = null; // Will be loaded from config.json
+// ===== STATE =====
+let config = null; // Loaded from config.json
+let currentConversation = null; // { id, thread_id, parent_message_id, title, messages, created_at, updated_at }
+const MAX_CONVERSATIONS = 20;
+const STORAGE_PREFIX = 'snowsage_conversation_';
+const STORAGE_LIST_KEY = 'snowsage_conversation_list';
 
-// Load configuration
+// ===== CONVERSATION STORAGE =====
+
+// Get list of conversation IDs
+function getConversationList() {
+  try {
+    const list = localStorage.getItem(STORAGE_LIST_KEY);
+    return list ? JSON.parse(list) : [];
+  } catch (e) {
+    console.error('[storage] Failed to load conversation list:', e);
+    return [];
+  }
+}
+
+// Save conversation list
+function saveConversationList(list) {
+  try {
+    localStorage.setItem(STORAGE_LIST_KEY, JSON.stringify(list));
+  } catch (e) {
+    console.error('[storage] Failed to save conversation list:', e);
+  }
+}
+
+// Load a specific conversation by ID
+function loadConversation(id) {
+  try {
+    const data = localStorage.getItem(STORAGE_PREFIX + id);
+    return data ? JSON.parse(data) : null;
+  } catch (e) {
+    console.error('[storage] Failed to load conversation:', e);
+    return null;
+  }
+}
+
+// Save current conversation
+function saveCurrentConversation() {
+  if (!currentConversation) return;
+  
+  try {
+    // Update timestamp
+    currentConversation.updated_at = new Date().toISOString();
+    
+    // Save conversation data
+    localStorage.setItem(STORAGE_PREFIX + currentConversation.id, JSON.stringify(currentConversation));
+    
+    // Update conversation list
+    let list = getConversationList();
+    if (!list.includes(currentConversation.id)) {
+      list.unshift(currentConversation.id);
+      
+      // Prune old conversations if we exceed max
+      if (list.length > MAX_CONVERSATIONS) {
+        const removed = list.slice(MAX_CONVERSATIONS);
+        removed.forEach(id => {
+          localStorage.removeItem(STORAGE_PREFIX + id);
+        });
+        list = list.slice(0, MAX_CONVERSATIONS);
+      }
+      
+      saveConversationList(list);
+    }
+    
+    console.log('[storage] Saved conversation:', currentConversation.id);
+  } catch (e) {
+    console.error('[storage] Failed to save conversation:', e);
+    if (e.name === 'QuotaExceededError') {
+      alert('Storage quota exceeded. Please clear old conversations.');
+    }
+  }
+}
+
+// Generate title from first message (first 50 chars)
+function generateTitle(text) {
+  const cleaned = text.trim().replace(/\s+/g, ' ');
+  return cleaned.length > 50 ? cleaned.substring(0, 50) + '...' : cleaned;
+}
+
+// Create new conversation
+function createNewConversation() {
+  const id = 'conv_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+  currentConversation = {
+    id: id,
+    thread_id: 0,
+    parent_message_id: 0,
+    title: 'New Conversation',
+    messages: [],
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+  
+  console.log('[conversation] Created new conversation:', id);
+  updateThreadIndicator();
+  renderConversationHistory();
+  
+  // Clear display
+  resultEl.innerHTML = '<p>Ready. Ask a question to start a new conversation.</p>';
+  resultRawEl.textContent = 'Ready.';
+  document.getElementById('prompt').value = '';
+}
+
+// Load existing conversation
+function switchToConversation(id) {
+  const conv = loadConversation(id);
+  if (!conv) {
+    console.error('[conversation] Failed to load:', id);
+    return;
+  }
+  
+  currentConversation = conv;
+  console.log('[conversation] Loaded conversation:', id);
+  updateThreadIndicator();
+  renderConversationHistory();
+  
+  // Display conversation messages
+  displayConversationMessages();
+}
+
+// Display all messages in current conversation
+function displayConversationMessages() {
+  if (!currentConversation || currentConversation.messages.length === 0) {
+    resultEl.innerHTML = '<p>No messages in this conversation yet.</p>';
+    resultRawEl.textContent = '';
+    return;
+  }
+  
+  resultEl.innerHTML = '';
+  
+  currentConversation.messages.forEach((msg, idx) => {
+    const msgDiv = document.createElement('div');
+    msgDiv.style.marginBottom = '16px';
+    msgDiv.style.paddingBottom = '16px';
+    msgDiv.style.borderBottom = '1px solid #e5e8eb';
+    
+    // Message header
+    const header = document.createElement('div');
+    header.style.fontSize = '11px';
+    header.style.color = 'var(--muted)';
+    header.style.marginBottom = '6px';
+    header.style.fontWeight = '600';
+    header.textContent = msg.role === 'user' ? '👤 You' : '🤖 Agent';
+    if (msg.timestamp) {
+      const time = new Date(msg.timestamp).toLocaleTimeString();
+      header.textContent += ` • ${time}`;
+    }
+    msgDiv.appendChild(header);
+    
+    // Message content
+    if (msg.role === 'user') {
+      const p = document.createElement('p');
+      p.textContent = msg.content;
+      p.style.margin = '0';
+      msgDiv.appendChild(p);
+    } else if (msg.role === 'assistant' && msg.events) {
+      const tempResult = document.createElement('div');
+      resultEl.appendChild(tempResult);
+      const oldResultEl = resultEl;
+      // Temporarily swap resultEl to render into msgDiv
+      window.tempResultEl = tempResult;
+      renderResponse(msg.events);
+      msgDiv.appendChild(tempResult);
+    }
+    
+    resultEl.appendChild(msgDiv);
+  });
+  
+  // Show raw JSON of last message
+  const lastMsg = currentConversation.messages[currentConversation.messages.length - 1];
+  if (lastMsg && lastMsg.rawResponse) {
+    resultRawEl.textContent = JSON.stringify(lastMsg.rawResponse, null, 2);
+  }
+}
+
+// Update thread indicator
+function updateThreadIndicator() {
+  if (!currentConversation) {
+    threadIndicator.textContent = '';
+    return;
+  }
+  
+  const isNew = currentConversation.messages.length === 0;
+  if (isNew) {
+    threadIndicator.textContent = 'New conversation';
+  } else {
+    threadIndicator.textContent = `Thread ${currentConversation.thread_id || 0} • ${currentConversation.messages.length} message(s)`;
+  }
+}
+
+// Render conversation history sidebar
+function renderConversationHistory() {
+  conversationHistoryEl.innerHTML = '';
+  
+  const list = getConversationList();
+  
+  list.forEach(id => {
+    const conv = loadConversation(id);
+    if (!conv) return;
+    
+    const item = document.createElement('div');
+    item.className = 'conversation-item';
+    if (currentConversation && currentConversation.id === id) {
+      item.classList.add('active');
+    }
+    
+    const title = document.createElement('div');
+    title.className = 'conversation-item-title';
+    title.textContent = conv.title;
+    
+    const meta = document.createElement('div');
+    meta.className = 'conversation-item-meta';
+    
+    const date = document.createElement('div');
+    date.className = 'conversation-item-date';
+    const updatedDate = new Date(conv.updated_at);
+    const now = new Date();
+    const diffMs = now - updatedDate;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 1) {
+      date.textContent = 'Just now';
+    } else if (diffMins < 60) {
+      date.textContent = `${diffMins}m ago`;
+    } else if (diffHours < 24) {
+      date.textContent = `${diffHours}h ago`;
+    } else if (diffDays < 7) {
+      date.textContent = `${diffDays}d ago`;
+    } else {
+      date.textContent = updatedDate.toLocaleDateString();
+    }
+    
+    const count = document.createElement('div');
+    count.className = 'conversation-item-count';
+    count.textContent = conv.messages.length;
+    
+    meta.appendChild(date);
+    meta.appendChild(count);
+    
+    item.appendChild(title);
+    item.appendChild(meta);
+    
+    item.onclick = () => switchToConversation(id);
+    
+    conversationHistoryEl.appendChild(item);
+  });
+}
+
+// Clear all conversation history
+function clearAllHistory() {
+  if (!confirm('Are you sure you want to clear all conversation history? This cannot be undone.')) {
+    return;
+  }
+  
+  const list = getConversationList();
+  list.forEach(id => {
+    localStorage.removeItem(STORAGE_PREFIX + id);
+  });
+  localStorage.removeItem(STORAGE_LIST_KEY);
+  
+  console.log('[storage] Cleared all history');
+  createNewConversation();
+  renderConversationHistory();
+}
+
+// ===== CONFIG =====
+
 async function loadConfig() {
   try {
     const resp = await fetch('/config.json');
@@ -42,6 +315,24 @@ async function loadConfig() {
     alert('Failed to load config.json - check console');
     return null;
   }
+}
+
+// ===== RESPONSE RENDERING =====
+
+// Extract plain text from assistant message events for conversation history
+function extractTextFromEvents(events) {
+  if (!events || !Array.isArray(events)) return '';
+  
+  // Find the final assistant message
+  const finalMsg = events.find(e => e.role === 'assistant' && e.content);
+  if (!finalMsg || !finalMsg.content) return '';
+  
+  // Extract all text content items
+  const textParts = finalMsg.content
+    .filter(item => item.type === 'text' && item.text)
+    .map(item => item.text);
+  
+  return textParts.join('\n').trim();
 }
 
 // Render response content based on type
@@ -242,6 +533,8 @@ function renderTable(resultSet) {
   return table;
 }
 
+// ===== HEALTH CHECK =====
+
 async function checkHealth() {
   try {
     const resp = await j('/api/health');
@@ -258,13 +551,36 @@ async function checkHealth() {
   }
 }
 
-// Initialize app
+// ===== INITIALIZATION =====
+
 async function init() {
   await loadConfig();
   checkHealth();
+  
+  // Load or create conversation
+  const list = getConversationList();
+  if (list.length > 0) {
+    // Load most recent conversation
+    switchToConversation(list[0]);
+  } else {
+    // Create new conversation
+    createNewConversation();
+  }
 }
 
 init();
+
+// ===== EVENT HANDLERS =====
+
+// New conversation button
+document.getElementById('btnNewConversation').onclick = () => {
+  createNewConversation();
+};
+
+// Clear history button
+document.getElementById('btnClearHistory').onclick = () => {
+  clearAllHistory();
+};
 
 // Verify agent exists
 document.getElementById('btnVerifyAgent').onclick = async () => {
@@ -295,7 +611,7 @@ document.getElementById('btnVerifyAgent').onclick = async () => {
   }
 };
 
-// Send button calls the existing agent
+// Send button - calls the agent with thread tracking
 document.getElementById('btnSend').onclick = async () => {
   if (!config) {
     alert('Config not loaded yet');
@@ -304,6 +620,11 @@ document.getElementById('btnSend').onclick = async () => {
   
   const prompt = document.getElementById('prompt').value.trim();
   if (!prompt) return;
+  
+  // Ensure we have a current conversation
+  if (!currentConversation) {
+    createNewConversation();
+  }
   
   const btnSend = document.getElementById('btnSend');
   const originalBtnText = btnSend.innerHTML;
@@ -315,23 +636,72 @@ document.getElementById('btnSend').onclick = async () => {
   btnSend.innerHTML = '<span class="spinner"></span>Sending...';
   resultEl.innerHTML = `<p>Sending to agent ${config.agentName}...</p><p style="color: var(--muted); font-size: 12px;">This may take up to 20 seconds...</p>`;
   
+  // Add user message to conversation
+  const userMessage = {
+    role: 'user',
+    content: prompt,
+    timestamp: new Date().toISOString()
+  };
+  currentConversation.messages.push(userMessage);
+  
+  // Set title from first message
+  if (currentConversation.messages.length === 1) {
+    currentConversation.title = generateTitle(prompt);
+  }
+  
   try {
+    // Build conversation history for context (simplified format for API)
+    const conversation_history = currentConversation.messages.map(msg => ({
+      role: msg.role,
+      content: msg.role === 'user' ? msg.content : extractTextFromEvents(msg.events)
+    }));
+    
     const resp = await j(`/api/agent/${config.agentName}/run`, { 
       method: 'POST', 
       headers: { 'Content-Type': 'application/json' }, 
-      body: JSON.stringify({ prompt }) 
+      body: JSON.stringify({ 
+        prompt,
+        thread_id: currentConversation.thread_id,
+        parent_message_id: currentConversation.parent_message_id,
+        conversation_history: conversation_history
+      }) 
     });
     
     // Store raw JSON for debugging
     resultRawEl.textContent = JSON.stringify(resp, null, 2);
     
     if (resp.ok && resp.events) {
+      // Update thread IDs for next message
+      if (resp.thread_id !== undefined && resp.thread_id !== null) {
+        currentConversation.thread_id = resp.thread_id;
+      }
+      if (resp.parent_message_id !== undefined && resp.parent_message_id !== null) {
+        currentConversation.parent_message_id = resp.parent_message_id;
+      }
+      
+      // Add assistant message to conversation
+      const assistantMessage = {
+        role: 'assistant',
+        events: resp.events,
+        rawResponse: resp,
+        timestamp: new Date().toISOString()
+      };
+      currentConversation.messages.push(assistantMessage);
+      
+      // Save conversation to localStorage
+      saveCurrentConversation();
+      
       // Render the formatted response
       renderResponse(resp.events);
       
-      // Update status
+      // Update UI
       statusDot.className = 'dot green';
       statusText.textContent = 'Completed';
+      updateThreadIndicator();
+      renderConversationHistory();
+      
+      // Clear prompt
+      document.getElementById('prompt').value = '';
     } else if (resp.ok) {
       resultEl.innerHTML = '<p>Response received but no events found.</p>';
       statusDot.className = 'dot green';
@@ -342,12 +712,18 @@ document.getElementById('btnSend').onclick = async () => {
       resultEl.innerHTML = `<p style="color: #a00;"><strong>Error ${errorCode}:</strong> ${errorMsg}</p>`;
       statusDot.className = 'dot red';
       statusText.textContent = 'Error - check auth';
+      
+      // Remove the user message since it failed
+      currentConversation.messages.pop();
     }
   } catch (e) {
     statusDot.className = 'dot red';
     statusText.textContent = 'Error';
     resultEl.innerHTML = `<p style="color: #a00;">Error: ${String(e)}</p>`;
     resultRawEl.textContent = String(e);
+    
+    // Remove the user message since it failed
+    currentConversation.messages.pop();
   } finally {
     // Re-enable button
     btnSend.disabled = false;

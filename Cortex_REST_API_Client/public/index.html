@@ -22,6 +22,13 @@
     <main class="container">
       <section class="left">
         <div class="card">
+          <h3>Conversations</h3>
+          <button id="btnNewConversation" class="btn primary" style="width: 100%; margin-bottom: 12px;">+ New Conversation</button>
+          <div id="conversationHistory" class="conversation-list"></div>
+          <button id="btnClearHistory" class="btn secondary" style="width: 100%; margin-top: 12px; font-size: 11px;">Clear History</button>
+        </div>
+        
+        <div class="card">
           <h3>Presets</h3>
           <div id="presetsContainer"></div>
           <button id="btnVerifyAgent" class="btn secondary">Verify agent</button>
@@ -29,7 +36,10 @@
       </section>
       <section class="right">
         <div class="card">
-          <label for="prompt">Ask a question</label>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <label for="prompt">Ask a question</label>
+            <span id="threadIndicator" style="font-size: 11px; color: var(--muted);"></span>
+          </div>
           <textarea id="prompt" rows="3" placeholder="Ask the agent about clustering, query performance, costs..."></textarea>
           <button id="btnSend" class="btn primary">Send</button>
         </div>

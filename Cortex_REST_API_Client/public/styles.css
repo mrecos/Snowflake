@@ -40,4 +40,15 @@ textarea, input { width: 100%; padding: 8px; border: 1px solid #cfd6dd; border-r
 .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 6px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Conversation history */
+.conversation-list { max-height: 300px; overflow-y: auto; overflow-x: hidden; }
+.conversation-item { padding: 8px; margin: 4px 0; border: 1px solid #e5e8eb; border-radius: 4px; cursor: pointer; transition: all 0.2s; }
+.conversation-item:hover { background: #f5f9fc; border-color: var(--brand); }
+.conversation-item.active { background: #e8f5fb; border-color: var(--brand); border-width: 2px; }
+.conversation-item-title { font-size: 12px; font-weight: 500; color: var(--ink); margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conversation-item-meta { font-size: 10px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
+.conversation-item-date { flex: 1; }
+.conversation-item-count { background: #e8f5fb; color: var(--brand-dark); padding: 2px 6px; border-radius: 3px; font-weight: 600; }
+.conversation-list:empty::before { content: "No saved conversations"; display: block; text-align: center; color: var(--muted); font-size: 11px; padding: 16px 8px; }
+
 

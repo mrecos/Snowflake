@@ -73,13 +73,15 @@ async function sfFetch(path, method = 'GET', body) {
 app.post('/api/agent/:name/run', async (req, res) => {
   try {
     const { name } = req.params;
-    const { prompt } = req.body;
+    const { prompt, thread_id, parent_message_id, conversation_history } = req.body;
 
     if (!prompt) {
       return res.status(400).json({ ok: false, error: 'Prompt required' });
     }
 
     console.log(`[run] Calling agent:run for ${name}`);
+    console.log(`[run] Thread: ${thread_id || 0}, Parent: ${parent_message_id || 0}`);
+    console.log(`[run] History messages: ${conversation_history ? conversation_history.length : 0}`);
 
     // Use the agent:run endpoint (note the colon!)
     // Ref: https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents-run
@@ -88,19 +90,40 @@ app.post('/api/agent/:name/run', async (req, res) => {
     
     console.log(`[run] POST ${url}`);
 
-    const requestBody = {
-      messages: [
+    // Build messages array with full conversation history for context
+    let messages = [];
+    
+    // Include previous messages if provided (for multi-turn conversations)
+    if (conversation_history && Array.isArray(conversation_history) && conversation_history.length > 0) {
+      messages = conversation_history.map(msg => ({
+        role: msg.role,
+        content: typeof msg.content === 'string' 
+          ? [{ type: 'text', text: msg.content }]
+          : msg.content
+      }));
+    }
+    
+    // Add current user message
+    messages.push({
+      role: 'user',
+      content: [
         {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: prompt
-            }
-          ]
+          type: 'text',
+          text: prompt
         }
       ]
-    };
+    });
+
+    // Build request body
+    const requestBody = { messages };
+
+    // Add thread_id and parent_message_id ONLY if continuing an existing conversation
+    // For new conversations: omit these fields entirely (Snowflake creates new thread)
+    // For follow-ups: include both fields with actual thread IDs
+    if (thread_id !== undefined && thread_id !== null && thread_id !== 0) {
+      requestBody.thread_id = thread_id;
+      requestBody.parent_message_id = parent_message_id;
+    }
 
     const response = await fetch(url, {
       method: 'POST',
@@ -124,6 +147,8 @@ app.post('/api/agent/:name/run', async (req, res) => {
     // Parse server-sent events
     const events = text.split('\n\n').filter(e => e.trim());
     const parsedEvents = [];
+    let returnedThreadId = null;
+    let returnedParentMessageId = null;
     
     for (const event of events) {
       const lines = event.split('\n');
@@ -131,7 +156,51 @@ app.post('/api/agent/:name/run', async (req, res) => {
       if (dataLine) {
         try {
           const jsonStr = dataLine.substring(6); // Remove 'data: ' prefix
-          parsedEvents.push(JSON.parse(jsonStr));
+          const parsed = JSON.parse(jsonStr);
+          parsedEvents.push(parsed);
+          
+          // Extract thread_id and parent_message_id from metadata events
+          if (parsed.type === 'metadata') {
+            if (parsed.thread_id !== undefined) returnedThreadId = parsed.thread_id;
+            if (parsed.parent_message_id !== undefined) returnedParentMessageId = parsed.parent_message_id;
+          }
+          
+          // Also check in response objects (some implementations return it here)
+          if (parsed.response) {
+            if (parsed.response.thread_id !== undefined) returnedThreadId = parsed.response.thread_id;
+            if (parsed.response.parent_message_id !== undefined) returnedParentMessageId = parsed.response.parent_message_id;
+          }
+          
+          // Check in trace/span attributes (AgentV2RequestResponseInfo)
+          if (Array.isArray(parsed)) {
+            parsed.forEach(item => {
+              if (typeof item === 'string') {
+                try {
+                  const traceData = JSON.parse(item);
+                  if (traceData.attributes) {
+                    traceData.attributes.forEach(attr => {
+                      if (attr.key === 'snow.ai.observability.agent.thread_id' && attr.value?.intValue) {
+                        const tid = parseInt(attr.value.intValue);
+                        if (tid > 0) returnedThreadId = tid;
+                      }
+                      if (attr.key === 'snow.ai.observability.agent.parent_message_id' && attr.value?.intValue) {
+                        const pmid = parseInt(attr.value.intValue);
+                        if (pmid > 0) returnedParentMessageId = pmid;
+                      }
+                    });
+                  }
+                } catch (e) {
+                  // Not a JSON string, skip
+                }
+              }
+            });
+          }
+          
+          // Check if the parsed event itself has role="assistant" with thread info
+          if (parsed.role === 'assistant') {
+            if (parsed.thread_id !== undefined && parsed.thread_id !== null) returnedThreadId = parsed.thread_id;
+            if (parsed.parent_message_id !== undefined && parsed.parent_message_id !== null) returnedParentMessageId = parsed.parent_message_id;
+          }
         } catch (e) {
           console.log(`[run] Could not parse event: ${dataLine.substring(0, 100)}`);
         }
@@ -139,10 +208,13 @@ app.post('/api/agent/:name/run', async (req, res) => {
     }
 
     console.log(`[run] Parsed ${parsedEvents.length} events`);
+    console.log(`[run] Returned thread: ${returnedThreadId}, parent: ${returnedParentMessageId}`);
 
     res.json({
       ok: true,
       events: parsedEvents,
+      thread_id: returnedThreadId,
+      parent_message_id: returnedParentMessageId,
       raw_length: text.length
     });
   } catch (e) {

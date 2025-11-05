@@ -1,0 +1,42 @@
+v2.0: Add multi-turn conversations and persistent history
+
+Major features:
+- Multi-turn conversation support with full context
+- localStorage persistence (max 20 conversations)
+- Conversation history UI with sidebar
+- Auto-generated titles and relative timestamps
+- New/Clear conversation buttons
+- Thread tracking and message history display
+
+Technical changes:
+- Backend: Send full message history for agent context
+- Backend: Enhanced thread ID extraction from trace spans
+- Backend: Omit thread fields for new conversations (fixes 401)
+- Frontend: Complete rewrite with localStorage management
+- Frontend: Conversation switching and history rendering
+- Frontend: Extract text from events for context building
+
+Bug fixes:
+- Fixed: "Thread 0 does not exist" error (omit fields for new convos)
+- Fixed: Agent doesn't remember context (send full message history)
+- Fixed: Thread IDs not extracted (parse trace attributes)
+
+Documentation:
+- Rewrote README.md and DEPLOYMENT.md (generic, comprehensive)
+- Updated CHANGELOG.md with implementation details
+- Added TESTING.md with 12 test scenarios
+- Added RELEASE_NOTES_v2.0.md
+
+Breaking changes: None (backwards compatible)
+
+Files changed:
+- backend/server.js
+- public/app.js (major rewrite)
+- public/index.html
+- public/styles.css
+- README.md
+- DEPLOYMENT.md
+- CHANGELOG.md
+- TESTING.md (new)
+- RELEASE_NOTES_v2.0.md (new)
+

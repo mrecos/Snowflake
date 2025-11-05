@@ -1,6 +1,6 @@
-# Cortex Agent Demo — Local Deployment Guide
+# Snowflake Cortex Agent REST API Client — Deployment Guide
 
-This guide shows how to run the lightweight web UI and minimal proxy locally to demo your Snowflake Cortex Agent using your stored procedures and semantic model.
+This guide shows how to run the web UI locally and connect it to your Snowflake Cortex Agent.
 
 Reference: https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents-rest-api
 
@@ -8,76 +8,95 @@ Reference: https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agen
 
 ## 1) Prerequisites
 
-- Node.js 18+
-- Snowflake account + small warehouse (read-only role recommended)
-- Bearer token for REST API (short‑lived preferred)
-- Staged semantic model (if using Analyst): `@db.schema.stage/semantic_model.yaml`
+- **Node.js 18+** (check: `node --version`)
+- **Snowflake account** with a warehouse
+- **Cortex Agent** already created in Snowflake
+- **Personal Access Token (PAT)** for REST API authentication
 
 ---
 
-## 2) Configure environment (backend/.env)
+## 2) Configure Backend Environment
 
-Create `backend/.env`:
+Create `backend/.env` with your Snowflake connection details:
+
+```bash
+cd backend
+touch .env
+```
+
+Edit `backend/.env`:
 
 ```
 SNOWFLAKE_ACCOUNT_URL=https://<your_account>.snowflakecomputing.com
-AGENT_DB=PLATFORM_ANALYTICS
-AGENT_SCHEMA=PUBLIC
-WAREHOUSE=DEMO_WH
+AGENT_DB=YOUR_DATABASE
+AGENT_SCHEMA=YOUR_SCHEMA
+WAREHOUSE=YOUR_WAREHOUSE
 AUTH_TOKEN=<your_PAT_token>
 ```
 
 **IMPORTANT:**
-- Keep the token ONLY in `backend/.env` (never in the frontend).
-- Use a small warehouse and a read‑only role.
-- The AUTH_TOKEN is a **Personal Access Token (PAT)** from Snowflake (see section 13 for how to create it).
-- Do NOT include "Bearer" prefix - just paste the token value.
+- Replace `<your_account>` with your Snowflake account identifier
+- Replace `YOUR_DATABASE`, `YOUR_SCHEMA`, `YOUR_WAREHOUSE` with actual values
+- The `AUTH_TOKEN` is a **Personal Access Token (PAT)** from Snowflake (see section 6 for creation steps)
+- Do NOT include "Bearer" prefix - just paste the token value
+- Keep this file secure and NEVER commit to version control
+
+**Example:**
+```
+SNOWFLAKE_ACCOUNT_URL=https://abc12345.us-east-1.snowflakecomputing.com
+AGENT_DB=SNOWFLAKE_INTELLIGENCE
+AGENT_SCHEMA=AGENTS
+WAREHOUSE=DEMO_WH
+AUTH_TOKEN=sf-pat-AbCdEf123456...
+```
 
 ---
 
-## 3) Configure frontend (public/config.json)
+## 3) Configure Frontend Settings
 
-Copy the example config and customize:
+Copy the example config and customize for your agent:
 
 ```bash
 cd public
 cp config.example.json config.json
 ```
 
-Edit `config.json` to match your agent:
+Edit `public/config.json` to match your agent:
 
 ```json
 {
-  "agentName": "HACKTHON_SP_TEST_V1",
-  "agentDatabase": "SNOWFLAKE_INTELLIGENCE",
-  "agentSchema": "AGENTS",
+  "agentName": "YOUR_AGENT_NAME",
+  "agentDatabase": "YOUR_DATABASE",
+  "agentSchema": "YOUR_SCHEMA",
   "presets": [
     {
-      "label": "Clustering health",
-      "prompt": "Show clustering health for SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY"
+      "label": "Example question",
+      "prompt": "What can you help me with?"
     },
     {
-      "label": "Top warehouses",
-      "prompt": "What are the top 5 most expensive warehouses this month?"
+      "label": "Another question",
+      "prompt": "Show me recent activity"
     }
   ]
 }
 ```
 
-**Customization:**
-- `agentName`: Your agent's name (must match the agent in Snowflake)
-- `agentDatabase`, `agentSchema`: For display/reference (backend uses `.env` values)
-- `presets`: Array of preset questions - customize these for your use case!
-  - `label`: Button text shown in UI
-  - `prompt`: Question text sent to agent when clicked
+**Customization tips:**
+- `agentName`: Must exactly match your agent's name in Snowflake
+- `agentDatabase`, `agentSchema`: Must match where your agent is located
+- `presets`: Customize these for your use case!
+  - `label`: Text shown on button in UI
+  - `prompt`: Question sent to agent when button is clicked
+  - Add as many presets as you want
 
 **To share with coworkers:**
-- They only need to edit `public/config.json` for their agent name and presets
+- They only need to edit `public/config.json` for their agent
 - No code changes required!
+- Presets can be customized per user/team
 
 ---
 
-## 4) Install and start
+## 4) Install Dependencies and Start Server
 
 ```bash
 cd backend
@@ -85,158 +104,30 @@ npm install
 npm start
 ```
 
-Open `http://localhost:5173`
-
-The server logs missing envs on startup. Check console output for config status.
-
----
-
-## 5) Verify configuration
-
-In the UI, click the "Verify agent" button.
-- If envs are missing, a warning appears and the JSON result lists missing keys.
-- Update `.env` and restart the server if needed.
-
----
-
-## 6) Deploy stored procedures to Snowflake
-
-Before creating the agent, deploy your stored procedures:
-
-```sql
--- In Snowflake, run each stored procedure script
--- (Order doesn't matter)
-
--- 1) Clustering information
-@CLUSTER_INFO_SP.sql
-
--- 2) Query operator statistics  
-@QUERY_OPERATOR_STATS_SP.sql
-
--- 3) Query acceleration estimate
-@ESTIMATE_QUERY_ACCELERATION_SP.sql
-
--- 4) Search optimization costs
-@ESTIMATE_SEARCH_OPT_COSTS_SP.sql
-
--- 5) Warehouse resize (optional utility)
-@resize_SP
+You should see:
+```
+[server] listening on http://localhost:5173
+[server] config status: missing env = none
 ```
 
-Verify procedures exist:
-```sql
-SHOW PROCEDURES IN PLATFORM_ANALYTICS.PUBLIC;
-```
+If you see missing env vars, check your `.env` file and restart.
 
 ---
 
-## 7) Stage your semantic model (optional, for Analyst)
+## 5) Open the Application
 
-If using the Cortex Analyst tool with your `semantic_model.yaml`:
+Open your browser to: **http://localhost:5173**
 
-```sql
--- Create a stage if needed
-CREATE STAGE IF NOT EXISTS PLATFORM_ANALYTICS.PUBLIC.MODELS;
-
--- Upload semantic_model.yaml
-PUT file://./semantic_model.yaml @PLATFORM_ANALYTICS.PUBLIC.MODELS;
-
--- Verify
-LIST @PLATFORM_ANALYTICS.PUBLIC.MODELS;
-```
-
-Update `server.js` line with the staged path:
-```javascript
-semantic_model_file: '@PLATFORM_ANALYTICS.PUBLIC.MODELS/semantic_model.yaml'
-```
+The UI will automatically:
+- Check configuration health
+- Display status indicator (green = connected, red = config issue)
+- Load your agent name and presets from `config.json`
 
 ---
 
-## 8) Status indicator
+## 6) Getting a Personal Access Token (AUTH_TOKEN)
 
-When you open the UI, it automatically checks configuration health:
-- **Green dot** = Connected (all env vars present, PAT token valid)
-- **Red dot** = Config missing or server offline (check `.env` and restart)
-- **Yellow dot** = Running a query
-
-The UI loads agent configuration from `public/config.json` (configured in section 3).
-
----
-
-## 9) Use presets and send questions
-
-Preset buttons populate the prompt with demo queries:
-- **Clustering health** → "Show clustering health for SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY"
-- **QAS eligibility** → "Estimate QAS for last query"
-- **Operator stats** → "Show operator stats for the last query"
-- **Search opt costs** → "Estimate search optimization costs for SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY"
-
-Click "Send" to send the question to your agent.
-
----
-
-## 10) Asking questions
-
-Click a preset button or type your own question, then click "Send".
-
-The backend calls the `agent:run` API which:
-1. Sends your prompt to the agent
-2. Receives streaming server-sent events as the agent works
-3. Returns the complete response with tool results
-
-The UI renders:
-- Clean text responses with formatting
-- Data tables from Analyst queries  
-- Interactive Vega-Lite charts
-- Raw JSON available in collapsible section
-
-Status indicator shows:
-- **Yellow** while running
-- **Blue** when completed successfully
-- **Red** if errors occur
-
----
-
-## 11) Security & budgeting
-
-- **Auth safety**: Token only in backend `.env`. Frontend never sees it.
-- **Role safety**: Use a role with read‑only access to demo objects.
-- **Warehouse safety**: Use a small warehouse and set `query_timeout: 60`.
-- **Budgeting**: Agent spec uses small time/token budget (20s, 8k tokens).
-
----
-
-## 12) Troubleshooting
-
-**UI warning "Authentication/config missing"**
-- Click "Check Config" and ensure all env keys are present and correct
-- Restart server after changing `.env`
-
-**Agent creation fails**
-- Verify `AGENT_DB`, `AGENT_SCHEMA`, and warehouse exist and are accessible by the token's role
-- Check procedure identifiers exist and are fully qualified
-- Look for error details in the JSON response
-
-**Analyst fails to use the semantic model**
-- Ensure the staged path in the create request is correct (e.g., `@db.schema.stage/semantic_model.yaml`)
-- Verify the role has read access to the stage
-
----
-
-## 13) Clean up
-
-- Stop the local server (`Ctrl+C`)
-- Optionally delete the Agent:
-  ```bash
-  # Via REST API or SQL
-  DROP AGENT PLATFORM_ANALYTICS.PUBLIC.DEMO_AGENT;
-  ```
-
----
-
-## 14) Getting a Personal Access Token (AUTH_TOKEN)
-
-**Recommended for demos: Use a Personal Access Token (PAT)**
+**Recommended for this application: Use a Personal Access Token (PAT)**
 
 ### Create a PAT in Snowsight (Easiest method)
 
@@ -244,74 +135,409 @@ Status indicator shows:
 2. Click your **username** (top right) → **Profile**
 3. Scroll down to **Personal Access Tokens** section
 4. Click **+ Generate New Token**
-5. Give it a name (e.g., "Demo Agent Token")
-6. Set expiration (e.g., 1 day for demo, 90 days max)
+5. Give it a name (e.g., "Cortex Agent Client")
+6. Set expiration:
+   - Short demos: 1-7 days
+   - Development: 30 days
+   - Maximum: 90 days
 7. Click **Generate**
 8. **Copy the token immediately** (you won't see it again!)
 9. Paste into your `backend/.env`:
    ```
-   AUTH_TOKEN=<paste_token_here>
+   AUTH_TOKEN=sf-pat-AbCdEf123456...
    ```
 
 **Important:**
 - Copy ONLY the token value (no "Bearer" prefix)
-- The token starts with a prefix like `sf-pat-...`
+- Token starts with a prefix like `sf-pat-...`
 - Store it securely; never commit to version control
 - Tokens expire based on your setting (max 90 days)
+- For production, use OAuth or rotate tokens regularly
 
-### Alternative: Using SnowSQL/CLI with key-pair
+### Alternative: SnowSQL/CLI with key-pair
+
+For programmatic access in production environments:
 ```bash
 snowsql -a <account> -u <user> --private-key-path <key> -o output_format=json
 ```
 
-### For production:
-- Use OAuth for REST API access
-- Rotate tokens regularly
-- See: https://docs.snowflake.com/en/developer-guide/sql-api/guide
+See: https://docs.snowflake.com/en/developer-guide/sql-api/guide
 
 ---
 
-## 15) Project structure
+## 7) Verify Configuration
+
+In the UI, you should see:
+- **Status indicator** in top right (green dot = connected, red = issue)
+- **Your agent name** loaded from config.json
+- **Preset buttons** for quick questions
+
+Click **"Verify agent"** button to confirm:
+- Environment variables are set correctly
+- PAT token is valid
+- Agent exists and is accessible
+
+If verification fails:
+- Check `.env` file has all required values
+- Verify agent name matches exactly (case-sensitive)
+- Ensure PAT token hasn't expired
+- Check Snowflake role has access to the agent
+- Restart server after changing `.env`
+
+---
+
+## 8) Status Indicator
+
+The status indicator shows connection and processing state:
+- **Green dot** = Connected (all env vars present, can reach Snowflake)
+- **Yellow dot** = Processing a request
+- **Red dot** = Configuration issue or error
+
+When you first load the page, it automatically checks `/api/health` to verify setup.
+
+---
+
+## 9) Using the Application
+
+### Preset Questions
+
+Click any preset button to populate the question field with that prompt. Then click "Send" to submit to your agent.
+
+### Custom Questions
+
+Type your own question in the text area and click "Send".
+
+### What Happens
+
+1. Question sent to your Snowflake Cortex Agent
+2. Agent processes using its configured tools (Analyst, Search, stored procedures, etc.)
+3. Streaming response parsed from server-sent events
+4. Response displayed with rich formatting:
+   - Text with markdown formatting
+   - Data tables from query results
+   - Interactive Vega-Lite charts (if agent returns chart specs)
+   - Raw JSON available in collapsible debug section
+
+### Status Changes
+
+- **Yellow** while agent is processing
+- **Green** when completed successfully
+- **Red** if errors occur
+
+---
+
+## 10) Conversation Features
+
+### Multi-Turn Conversations
+
+The application maintains conversation context automatically:
+- First question creates a new thread (thread_id: 0)
+- Responses include thread_id and parent_message_id
+- Follow-up questions include these IDs for context
+- Agent can reference previous messages
+
+### Conversation History
+
+- All conversations saved in browser localStorage
+- View recent conversations in sidebar
+- Click to load and continue previous conversations
+- "New Conversation" button to start fresh
+- Stores up to 20 recent conversations (auto-prunes oldest)
+
+### Conversation Management
+
+- **New Conversation**: Click button to reset and start fresh
+- **Continue Conversation**: Click any conversation in history to resume
+- **Clear History**: Remove all saved conversations from localStorage
+
+---
+
+## 11) Creating Your Cortex Agent
+
+If you haven't created an agent yet, here's a minimal example:
+
+### Using SQL
+
+```sql
+-- Create a basic agent with Cortex Analyst
+CREATE AGENT IDENTIFIER('"YOUR_DATABASE"."YOUR_SCHEMA"."YOUR_AGENT_NAME"') AS (
+  SELECT SNOWFLAKE.CORTEX.CREATE_AGENT(
+    OBJECT_CONSTRUCT(
+      'name', 'YOUR_AGENT_NAME',
+      'description', 'Your agent description',
+      'tools', ARRAY_CONSTRUCT(
+        OBJECT_CONSTRUCT(
+          'type', 'ANALYST',
+          'semantic_model_file', '@YOUR_STAGE/semantic_model.yaml'
+        )
+      ),
+      'instructions', 'Your agent instructions here',
+      'warehouse', 'YOUR_WAREHOUSE',
+      'query_timeout', 60,
+      'max_tool_iterations', 5
+    )
+  )
+);
+```
+
+### Using REST API
+
+```bash
+POST /api/v2/databases/{DB}/schemas/{SCHEMA}/agents
+Authorization: Bearer <PAT_TOKEN>
+
+{
+  "name": "YOUR_AGENT_NAME",
+  "description": "Your agent description",
+  "tools": [
+    {
+      "type": "ANALYST",
+      "semantic_model_file": "@YOUR_STAGE/semantic_model.yaml"
+    }
+  ],
+  "instructions": "Your agent instructions",
+  "warehouse": "YOUR_WAREHOUSE",
+  "query_timeout": 60,
+  "max_tool_iterations": 5
+}
+```
+
+**Agent Tool Options:**
+- **ANALYST**: Text-to-SQL over semantic models
+- **SEARCH**: Semantic search over staged data
+- **PROCEDURE**: Call stored procedures
+- **FUNCTION**: Call UDFs
+
+See: https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents
+
+---
+
+## 12) Security Best Practices
+
+**For demos and development:**
+- Use a small warehouse (XS or S)
+- Set query_timeout in agent config (e.g., 60 seconds)
+- Use read-only role when possible
+- Short-lived PAT tokens (1-7 days)
+
+**For production:**
+- Use OAuth instead of PAT
+- Implement token rotation
+- Use dedicated service account
+- Set resource monitors on warehouses
+- Audit agent usage via ACCOUNT_USAGE
+
+**Never:**
+- Commit `.env` to version control
+- Share PAT tokens via email/Slack
+- Use admin roles for agent operations
+- Expose token in frontend code
+
+---
+
+## 13) Troubleshooting
+
+### "Server offline" or red status indicator
+
+**Check:**
+- Backend server is running (`npm start` in backend/)
+- No errors in terminal console
+- Port 5173 is not in use by another app
+
+**Fix:**
+```bash
+cd backend
+npm start
+# Check console for error messages
+```
+
+### "Config missing" or authentication errors
+
+**Check:**
+- All required env vars in `backend/.env`
+- PAT token is valid and not expired
+- Snowflake account URL is correct
+
+**Fix:**
+```bash
+# Verify .env file
+cat backend/.env
+
+# Test health endpoint
+curl http://localhost:5173/api/health
+```
+
+### "Agent not found"
+
+**Check:**
+- Agent name in `config.json` matches exactly (case-sensitive)
+- Database and schema names are correct
+- Your role has access to the agent
+
+**Fix:**
+```sql
+-- In Snowflake, verify agent exists
+SHOW AGENTS IN YOUR_DATABASE.YOUR_SCHEMA;
+
+-- Grant access if needed
+GRANT USAGE ON AGENT YOUR_DATABASE.YOUR_SCHEMA.YOUR_AGENT_NAME TO ROLE YOUR_ROLE;
+```
+
+### Response parsing errors
+
+**Check:**
+- Agent is returning valid responses
+- No network interruptions during processing
+- Check raw JSON in debug section for error details
+
+**Debug:**
+- Open browser Developer Tools (F12)
+- Check Console tab for JavaScript errors
+- Check Network tab for API responses
+- Look at raw JSON debug section in UI
+
+### localStorage full
+
+**Symptom:**
+- Can't save new conversations
+- Console errors about quota exceeded
+
+**Fix:**
+- Click "Clear History" in UI
+- Or manually: Open browser console and run `localStorage.clear()`
+
+---
+
+## 14) Port Configuration
+
+By default, the server runs on port **5173**.
+
+To change the port:
+
+```bash
+# In backend/.env, add:
+PORT=3000
+
+# Restart server
+npm start
+```
+
+Then open `http://localhost:3000`
+
+---
+
+## 15) Project Structure Reference
 
 ```
-TECHUP_HACKATHON/
+Cortex_REST_API_Client/
 ├── backend/
 │   ├── package.json          # Dependencies (express, cors, dotenv)
-│   ├── server.js             # Minimal proxy with routes
+│   ├── server.js             # Express proxy with routes
 │   └── .env                  # Server config (NOT in git)
 ├── public/
-│   ├── index.html            # UI with logo
-│   ├── styles.css            # Blue color scheme
+│   ├── index.html            # Main UI
+│   ├── styles.css            # Styles
 │   ├── app.js                # Frontend logic
-│   ├── config.json           # Agent and presets config
-│   ├── config.example.json   # Example config template
-│   └── snow_sage1.png        # Logo image
-├── CLUSTER_INFO_SP.sql       # Clustering info sproc
-├── QUERY_OPERATOR_STATS_SP.sql
-├── ESTIMATE_QUERY_ACCELERATION_SP.sql
-├── ESTIMATE_SEARCH_OPT_COSTS_SP.sql
-├── resize_SP                 # Warehouse resize sproc
-├── semantic_model.yaml       # Semantic model (stage this)
-└── DEPLOYMENT.md             # This file
+│   ├── config.json           # Agent config (customize this!)
+│   ├── config.example.json   # Template
+│   └── snow_sage1.png        # Logo
+├── DEPLOYMENT.md             # This file
+└── README.md                 # Project overview
 ```
 
 ---
 
-## 16) References
+## 16) Advanced: Running with Docker (Optional)
 
-- Cortex Agents REST API: https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents-rest-api
-- Query Operator Stats: https://docs.snowflake.com/en/sql-reference/functions/get_query_operator_stats
-- QAS Estimate: https://docs.snowflake.com/en/sql-reference/functions/system_estimate_query_acceleration
-- Search Opt Costs: https://docs.snowflake.com/en/sql-reference/functions/system_estimate_search_optimization_costs
-- Clustering Information: https://docs.snowflake.com/en/sql-reference/functions/system_clustering_information
+Create `Dockerfile`:
+
+```dockerfile
+FROM node:18-alpine
+WORKDIR /app
+COPY backend/package*.json ./backend/
+RUN cd backend && npm install
+COPY . .
+WORKDIR /app/backend
+CMD ["npm", "start"]
+```
+
+Build and run:
+```bash
+docker build -t cortex-agent-client .
+docker run -p 5173:5173 --env-file backend/.env cortex-agent-client
+```
 
 ---
 
-## 17) Next steps (optional)
+## 17) Next Steps
 
-- Implement Threads/Runs in `/api/agent/:name/run` to execute prompts end‑to‑end
-- Add toast notifications for success/error states
-- Persist last N results in `localStorage`
-- Replace logo placeholder with actual customer logo
-- Add more preset prompts based on your semantic model
+Once you're up and running:
 
+1. **Customize presets** - Add questions specific to your agent's capabilities
+2. **Test multi-turn** - Try follow-up questions to see context maintained
+3. **Browse history** - Use conversation history to revisit past interactions
+4. **Share with team** - Have coworkers edit `config.json` for their agents
+5. **Explore responses** - Check raw JSON to understand agent behavior
+
+**Optional enhancements:**
+- Add more presets for common workflows
+- Create multiple config files for different agents
+- Style customizations in `styles.css`
+- Replace logo with your brand
+
+---
+
+## 18) Resources
+
+- Cortex Agents Documentation: https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents
+- Cortex Agents REST API: https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents-rest-api
+- Cortex Analyst: https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-analyst
+- Cortex Search: https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-search
+- Personal Access Tokens: https://docs.snowflake.com/en/user-guide/ui-snowsight-profile#generate-a-personal-access-token
+
+---
+
+## 19) Getting Help
+
+**Server logs:**
+Check the terminal where you ran `npm start` for detailed logs:
+- `[server]` - Server startup and config
+- `[sfFetch]` - Snowflake API calls
+- `[run]` - Agent execution logs
+
+**Browser console:**
+Press F12 and check Console tab for frontend errors:
+- `[config]` - Configuration loading
+- Network tab shows API requests/responses
+
+**Common issues:**
+- Authentication: Check PAT token validity
+- Agent not found: Verify names match exactly
+- Timeout: Increase query_timeout in agent config
+- Empty response: Check agent tools are configured correctly
+
+---
+
+## 20) Clean Up
+
+To stop the server:
+- Press `Ctrl+C` in the terminal
+
+To completely remove:
+```bash
+# Remove node modules
+rm -rf backend/node_modules
+
+# Remove config (optional)
+rm backend/.env
+rm public/config.json
+```
+
+To delete agent from Snowflake:
+```sql
+DROP AGENT YOUR_DATABASE.YOUR_SCHEMA.YOUR_AGENT_NAME;
+```
+
+---
+
+Enjoy using your Snowflake Cortex Agent REST API Client!
