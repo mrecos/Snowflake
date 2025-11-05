@@ -11,11 +11,13 @@ Reference: [Cortex Agents Run API](https://docs.snowflake.com/en/user-guide/snow
 This application provides a clean, minimal web interface for interacting with any Snowflake Cortex Agent. It acts as a bridge between browser and Snowflake's REST API, handling authentication securely on the backend while providing an intuitive chat-like interface.
 
 **✨ Key Features:**
+- **Chat-style interface** - Natural conversation flow with message bubbles (like ChatGPT/Claude)
 - **Fully configurable** - Agent name and preset questions via `public/config.json`
 - **Secure** - PAT token stored in backend `.env`, never exposed to browser
 - **Multi-turn conversations** - Maintains thread context for follow-up questions
-- **Conversation history** - Persists chats in browser localStorage
+- **Conversation history** - Persists chats in browser localStorage (max 20)
 - **Rich rendering** - Formatted text, data tables, and interactive Vega-Lite charts
+- **Instant feedback** - User messages appear immediately while agent processes
 - **Shareable** - Coworkers just edit 2 config files, no code changes needed
 - **Professional UI** - SnowSage branding with blue color scheme (#29B5E8)
 
@@ -112,13 +114,16 @@ Minimal Express proxy that:
 
 ### `public/index.html`
 
-Clean UI with:
+Chat-style UI with:
 - SnowSage logo and branding
 - Status indicator lights (green/yellow/red)
-- Conversation history sidebar with search
+- Conversation history sidebar (left) for switching between conversations
 - Preset buttons for common questions
-- Question input textarea
-- Rich response display (formatted text, tables, charts)
+- Question input textarea with thread indicator
+- Chat-style message display (user messages right, agent messages left)
+- Message bubbles with timestamps and role indicators
+- Auto-scroll with scroll-to-bottom button
+- Rich rendering in messages (formatted text, tables, charts)
 - Raw JSON debug view (collapsible)
 
 ### `public/app.js`
@@ -126,9 +131,12 @@ Clean UI with:
 Frontend logic:
 - Auto-checks health on page load
 - Loads configuration from `config.json`
-- Manages conversation history in localStorage
+- Manages conversation history in localStorage (max 20 conversations)
 - Handles thread_id/parent_message_id for multi-turn conversations
+- Chat-style message rendering (appendUserMessage, appendAssistantMessage)
+- Auto-scroll to latest message with scroll detection
 - Renders responses with markdown, tables, and Vega-Lite charts
+- Instant user message display for immediate feedback
 - Updates status indicator during processing
 
 ### `public/config.json`

@@ -1,5 +1,98 @@
 # Changelog — Snowflake Cortex Agent REST API Client
 
+## v2.1 - Chat-Style UI (November 2025)
+
+### Major UI Improvement
+
+**Problem:** In v2.0, only the latest response was visible. Users couldn't see the conversation flow or previous context without switching to conversation history view.
+
+**Solution:** Implemented chat-style message display similar to ChatGPT/Claude with left/right aligned message bubbles.
+
+#### Features Added
+
+**Chat-Style Message Display:**
+- ✅ User messages right-aligned with light blue background (#e8f5fb)
+- ✅ Agent messages left-aligned with white background
+- ✅ All messages remain visible with scrolling (no replacement)
+- ✅ Message bubbles with timestamps and role indicators (👤 You / 🤖 Agent)
+- ✅ Full rendering preserved (tables, charts, markdown in all messages)
+- ✅ Auto-scroll to bottom on new messages
+- ✅ Scroll-to-bottom button (appears when scrolled up)
+
+**Instant Feedback:**
+- User messages appear immediately when sent (no waiting for agent)
+- Smooth scroll animations
+- Better visual conversation flow
+
+### Technical Changes
+
+**Frontend (`app.js`):**
+- New: `appendUserMessage()` - Adds right-aligned user message bubble
+- New: `appendAssistantMessage()` - Adds left-aligned agent message bubble
+- New: `renderMessageContent()` - Renders content into target element
+- New: `scrollToBottom()` - Auto-scroll with smooth animation
+- New: `isAtBottom()` - Detect scroll position
+- New: `updateScrollButton()` - Show/hide scroll button
+- Modified: `displayConversationMessages()` - Uses append functions instead of replacing
+- Modified: Send handler - Shows user message immediately, appends agent response
+
+**Styles (`styles.css`):**
+- Added `.message-container`, `.message-user`, `.message-agent` for alignment
+- Added `.message-bubble` for card-style messages
+- Added `.message-header` and `.message-content` styling
+- Added `.scroll-to-bottom` floating button
+- Updated `.response-container` with smooth scrolling
+
+**UI (`index.html`):**
+- Added scroll-to-bottom button element
+
+### User Experience
+
+**Before (v2.0):**
+```
+┌─────────────────────────┐
+│ Response                │
+├─────────────────────────┤
+│ [Latest response only]  │
+│                         │
+│ Previous messages       │
+│ not visible             │
+└─────────────────────────┘
+```
+
+**After (v2.1):**
+```
+┌─────────────────────────┐
+│ Response                │
+├─────────────────────────┤
+│   👤 You • 2m ago       │
+│   ┌──────────────────┐  │
+│   │ Question 1       │  │
+│   └──────────────────┘  │
+│                         │
+│ 🤖 Agent • 2m ago       │
+│ ┌──────────────────┐    │
+│ │ Answer 1 [table] │    │
+│ └──────────────────┘    │
+│                         │
+│   👤 You • Just now     │
+│   ┌──────────────────┐  │
+│   │ Follow-up Q      │  │
+│   └──────────────────┘  │
+│                    ↓    │
+└─────────────────────────┘
+```
+
+### Benefits
+
+1. **Context always visible** - See full conversation at a glance
+2. **Natural flow** - Industry-standard chat interface pattern
+3. **Instant feedback** - User messages appear immediately
+4. **Easy navigation** - Scroll through history, jump to bottom
+5. **Clear distinction** - Visual separation between user/agent messages
+
+---
+
 ## v2.0 - Multi-Turn Conversations & History (November 2025)
 
 ### Major Features Added

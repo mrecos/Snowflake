@@ -1,0 +1,41 @@
+v2.1: Add chat-style UI for conversation display
+
+Major UI improvement:
+- Chat-style message bubbles (left/right alignment)
+- User messages right-aligned with light blue background
+- Agent messages left-aligned with white background
+- Full conversation visible with scrolling
+- Auto-scroll to bottom on new messages
+- Scroll-to-bottom button for navigation
+
+Features:
+- Messages append instead of replacing
+- Instant user message display (immediate feedback)
+- Timestamps on all messages
+- Role indicators (👤 You / 🤖 Agent)
+- Full rendering preserved (tables, charts, markdown)
+- Smooth scroll animations
+
+Technical changes:
+- New: appendUserMessage() and appendAssistantMessage()
+- New: scrollToBottom() with smooth animation
+- New: Scroll position detection and button visibility
+- Modified: displayConversationMessages() uses append pattern
+- Modified: Send handler shows user message immediately
+- Added: Chat message bubble CSS styles
+- Added: Scroll-to-bottom button in HTML
+
+User experience:
+- Natural conversation flow like ChatGPT/Claude
+- Context always visible without switching views
+- Clear visual distinction between user and agent
+- Easy navigation through conversation history
+
+Files changed:
+- public/app.js (new functions for chat UI)
+- public/styles.css (message bubble styles)
+- public/index.html (scroll button)
+- CHANGELOG.md (v2.1 documentation)
+
+Breaking changes: None
+

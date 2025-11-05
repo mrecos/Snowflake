@@ -18,6 +18,7 @@ const statusDot = document.getElementById('statusDot');
 const statusText = document.getElementById('statusText');
 const threadIndicator = document.getElementById('threadIndicator');
 const conversationHistoryEl = document.getElementById('conversationHistory');
+const scrollToBottomBtn = document.getElementById('scrollToBottom');
 
 // ===== STATE =====
 let config = null; // Loaded from config.json
@@ -25,6 +26,41 @@ let currentConversation = null; // { id, thread_id, parent_message_id, title, me
 const MAX_CONVERSATIONS = 20;
 const STORAGE_PREFIX = 'snowsage_conversation_';
 const STORAGE_LIST_KEY = 'snowsage_conversation_list';
+
+// ===== SCROLL HELPERS =====
+
+// Scroll to bottom of conversation
+function scrollToBottom(smooth = true) {
+  resultEl.scrollTo({
+    top: resultEl.scrollHeight,
+    behavior: smooth ? 'smooth' : 'auto'
+  });
+}
+
+// Check if user is at bottom of conversation
+function isAtBottom() {
+  const threshold = 50; // pixels from bottom
+  return resultEl.scrollHeight - resultEl.scrollTop - resultEl.clientHeight < threshold;
+}
+
+// Update scroll button visibility
+function updateScrollButton() {
+  if (isAtBottom()) {
+    scrollToBottomBtn.classList.remove('visible');
+  } else {
+    scrollToBottomBtn.classList.add('visible');
+  }
+}
+
+// Setup scroll button listener
+if (scrollToBottomBtn) {
+  scrollToBottomBtn.onclick = () => scrollToBottom(true);
+}
+
+// Setup scroll listener to show/hide button
+if (resultEl) {
+  resultEl.addEventListener('scroll', updateScrollButton);
+}
 
 // ===== CONVERSATION STORAGE =====
 
@@ -120,9 +156,10 @@ function createNewConversation() {
   renderConversationHistory();
   
   // Clear display
-  resultEl.innerHTML = '<p>Ready. Ask a question to start a new conversation.</p>';
+  resultEl.innerHTML = '<p style="text-align: center; color: var(--muted); padding: 40px 20px;">Ready. Ask a question to start a new conversation.</p>';
   resultRawEl.textContent = 'Ready.';
   document.getElementById('prompt').value = '';
+  scrollToBottomBtn.classList.remove('visible');
 }
 
 // Load existing conversation
@@ -145,49 +182,22 @@ function switchToConversation(id) {
 // Display all messages in current conversation
 function displayConversationMessages() {
   if (!currentConversation || currentConversation.messages.length === 0) {
-    resultEl.innerHTML = '<p>No messages in this conversation yet.</p>';
+    resultEl.innerHTML = '<p style="text-align: center; color: var(--muted); padding: 40px 20px;">No messages in this conversation yet.</p>';
     resultRawEl.textContent = '';
+    scrollToBottomBtn.classList.remove('visible');
     return;
   }
   
+  // Clear the display
   resultEl.innerHTML = '';
   
-  currentConversation.messages.forEach((msg, idx) => {
-    const msgDiv = document.createElement('div');
-    msgDiv.style.marginBottom = '16px';
-    msgDiv.style.paddingBottom = '16px';
-    msgDiv.style.borderBottom = '1px solid #e5e8eb';
-    
-    // Message header
-    const header = document.createElement('div');
-    header.style.fontSize = '11px';
-    header.style.color = 'var(--muted)';
-    header.style.marginBottom = '6px';
-    header.style.fontWeight = '600';
-    header.textContent = msg.role === 'user' ? '👤 You' : '🤖 Agent';
-    if (msg.timestamp) {
-      const time = new Date(msg.timestamp).toLocaleTimeString();
-      header.textContent += ` • ${time}`;
-    }
-    msgDiv.appendChild(header);
-    
-    // Message content
+  // Append all messages using the chat-style functions
+  currentConversation.messages.forEach((msg) => {
     if (msg.role === 'user') {
-      const p = document.createElement('p');
-      p.textContent = msg.content;
-      p.style.margin = '0';
-      msgDiv.appendChild(p);
+      appendUserMessage(msg.content, msg.timestamp);
     } else if (msg.role === 'assistant' && msg.events) {
-      const tempResult = document.createElement('div');
-      resultEl.appendChild(tempResult);
-      const oldResultEl = resultEl;
-      // Temporarily swap resultEl to render into msgDiv
-      window.tempResultEl = tempResult;
-      renderResponse(msg.events);
-      msgDiv.appendChild(tempResult);
+      appendAssistantMessage(msg.events, msg.timestamp);
     }
-    
-    resultEl.appendChild(msgDiv);
   });
   
   // Show raw JSON of last message
@@ -195,6 +205,9 @@ function displayConversationMessages() {
   if (lastMsg && lastMsg.rawResponse) {
     resultRawEl.textContent = JSON.stringify(lastMsg.rawResponse, null, 2);
   }
+  
+  // Scroll to bottom after loading conversation
+  setTimeout(() => scrollToBottom(false), 100);
 }
 
 // Update thread indicator
@@ -319,6 +332,64 @@ async function loadConfig() {
 
 // ===== RESPONSE RENDERING =====
 
+// Append a user message to the conversation display
+function appendUserMessage(text, timestamp = null) {
+  const container = document.createElement('div');
+  container.className = 'message-container message-user';
+  
+  const bubble = document.createElement('div');
+  bubble.className = 'message-bubble';
+  
+  const header = document.createElement('div');
+  header.className = 'message-header';
+  header.innerHTML = '<span class="icon">👤</span><span>You</span>';
+  if (timestamp) {
+    const time = new Date(timestamp).toLocaleTimeString();
+    header.innerHTML += ` <span>• ${time}</span>`;
+  }
+  
+  const content = document.createElement('div');
+  content.className = 'message-content';
+  content.textContent = text;
+  
+  bubble.appendChild(header);
+  bubble.appendChild(content);
+  container.appendChild(bubble);
+  resultEl.appendChild(container);
+  
+  scrollToBottom(true);
+}
+
+// Append an assistant message to the conversation display
+function appendAssistantMessage(events, timestamp = null) {
+  const container = document.createElement('div');
+  container.className = 'message-container message-agent';
+  
+  const bubble = document.createElement('div');
+  bubble.className = 'message-bubble';
+  
+  const header = document.createElement('div');
+  header.className = 'message-header';
+  header.innerHTML = '<span class="icon">🤖</span><span>Agent</span>';
+  if (timestamp) {
+    const time = new Date(timestamp).toLocaleTimeString();
+    header.innerHTML += ` <span>• ${time}</span>`;
+  }
+  
+  const content = document.createElement('div');
+  content.className = 'message-content';
+  
+  bubble.appendChild(header);
+  bubble.appendChild(content);
+  container.appendChild(bubble);
+  resultEl.appendChild(container);
+  
+  // Render the response content into the content div
+  renderMessageContent(events, content);
+  
+  scrollToBottom(true);
+}
+
 // Extract plain text from assistant message events for conversation history
 function extractTextFromEvents(events) {
   if (!events || !Array.isArray(events)) return '';
@@ -335,14 +406,12 @@ function extractTextFromEvents(events) {
   return textParts.join('\n').trim();
 }
 
-// Render response content based on type
-function renderResponse(events) {
-  resultEl.innerHTML = '';
-  
+// Render message content into a target element (used by appendAssistantMessage)
+function renderMessageContent(events, targetEl) {
   // Find the final assistant message
   const finalMsg = events.find(e => e.role === 'assistant' && e.content);
   if (!finalMsg || !finalMsg.content) {
-    resultEl.innerHTML = '<p>No response content found.</p>';
+    targetEl.innerHTML = '<p>No response content found.</p>';
     return;
   }
 
@@ -358,7 +427,7 @@ function renderResponse(events) {
       html = html.replace(/```([^`]+)```/g, '<pre style="background: #f5f7f9; padding: 8px; border-radius: 4px; overflow-x: auto;"><code>$1</code></pre>');
       html = html.replace(/\n/g, '<br>');
       p.innerHTML = html;
-      resultEl.appendChild(p);
+      targetEl.appendChild(p);
     }
     
     else if (item.type === 'tool_result' && item.tool_result) {
@@ -366,15 +435,15 @@ function renderResponse(events) {
       if (result.content && result.content[0] && result.content[0].json && result.content[0].json.result_set) {
         const rs = result.content[0].json.result_set;
         const table = renderTable(rs);
-        if (table) resultEl.appendChild(table);
+        if (table) targetEl.appendChild(table);
       }
     }
     
     else if (item.type === 'chart' && item.chart && item.chart.chart_spec) {
       const chartDiv = document.createElement('div');
       chartDiv.className = 'chart-container';
-      chartDiv.id = `chart-${idx}`;
-      resultEl.appendChild(chartDiv);
+      chartDiv.id = `chart-${Date.now()}-${idx}`;
+      targetEl.appendChild(chartDiv);
       
       try {
         const spec = JSON.parse(item.chart.chart_spec);
@@ -402,7 +471,7 @@ function renderResponse(events) {
           cornerRadiusEnd: 4  // Rounded bar ends
         };
         
-        vegaEmbed(`#chart-${idx}`, spec, { 
+        vegaEmbed(`#chart-${Date.now()}-${idx}`, spec, { 
           actions: {
             export: { svg: true, png: true },
             source: false,
@@ -629,14 +698,7 @@ document.getElementById('btnSend').onclick = async () => {
   const btnSend = document.getElementById('btnSend');
   const originalBtnText = btnSend.innerHTML;
   
-  // Show thinking state
-  statusDot.className = 'dot yellow';
-  statusText.textContent = 'Running...';
-  btnSend.disabled = true;
-  btnSend.innerHTML = '<span class="spinner"></span>Sending...';
-  resultEl.innerHTML = `<p>Sending to agent ${config.agentName}...</p><p style="color: var(--muted); font-size: 12px;">This may take up to 20 seconds...</p>`;
-  
-  // Add user message to conversation
+  // Add user message to conversation immediately
   const userMessage = {
     role: 'user',
     content: prompt,
@@ -648,6 +710,16 @@ document.getElementById('btnSend').onclick = async () => {
   if (currentConversation.messages.length === 1) {
     currentConversation.title = generateTitle(prompt);
   }
+  
+  // Show user message in UI immediately
+  appendUserMessage(prompt, userMessage.timestamp);
+  
+  // Clear prompt and show thinking state
+  document.getElementById('prompt').value = '';
+  statusDot.className = 'dot yellow';
+  statusText.textContent = 'Running...';
+  btnSend.disabled = true;
+  btnSend.innerHTML = '<span class="spinner"></span>Sending...';
   
   try {
     // Build conversation history for context (simplified format for API)
@@ -691,17 +763,14 @@ document.getElementById('btnSend').onclick = async () => {
       // Save conversation to localStorage
       saveCurrentConversation();
       
-      // Render the formatted response
-      renderResponse(resp.events);
+      // Append the assistant response to the chat
+      appendAssistantMessage(resp.events, assistantMessage.timestamp);
       
       // Update UI
       statusDot.className = 'dot green';
       statusText.textContent = 'Completed';
       updateThreadIndicator();
       renderConversationHistory();
-      
-      // Clear prompt
-      document.getElementById('prompt').value = '';
     } else if (resp.ok) {
       resultEl.innerHTML = '<p>Response received but no events found.</p>';
       statusDot.className = 'dot green';
