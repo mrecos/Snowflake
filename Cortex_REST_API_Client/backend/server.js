@@ -1,21 +1,42 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 dotenv.config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(express.static('../public'));
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT_DIR = path.resolve(__dirname, '..');
+const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
+const UI_CONFIG_PATH = path.join(PUBLIC_DIR, 'config.json');
+
+app.use(express.static(PUBLIC_DIR));
 
 const REQUIRED_ENV = [
   'SNOWFLAKE_ACCOUNT_URL',
+  'AGENT_NAME',
   'AGENT_DB',
   'AGENT_SCHEMA',
   'WAREHOUSE',
   'AUTH_TOKEN'  // PAT (Personal Access Token) from Snowflake
 ];
+
+function loadUiConfig() {
+  try {
+    const json = fs.readFileSync(UI_CONFIG_PATH, 'utf-8');
+    return JSON.parse(json);
+  } catch (e) {
+    console.error('[config] Failed to load UI config:', e.message);
+    return {};
+  }
+}
 
 app.get('/api/health', (_req, res) => {
   const missing = REQUIRED_ENV.filter((k) => !process.env[k]);
@@ -24,11 +45,26 @@ app.get('/api/health', (_req, res) => {
     missing,
     config: {
       account: process.env.SNOWFLAKE_ACCOUNT_URL,
+      agentName: process.env.AGENT_NAME,
       database: process.env.AGENT_DB,
       schema: process.env.AGENT_SCHEMA,
       warehouse: process.env.WAREHOUSE,
       has_token: !!process.env.AUTH_TOKEN
     }
+  });
+});
+
+app.get('/api/app-config', (_req, res) => {
+  const uiConfig = loadUiConfig();
+  res.json({
+    agentName: process.env.AGENT_NAME || '',
+    agentDatabase: process.env.AGENT_DB || '',
+    agentSchema: process.env.AGENT_SCHEMA || '',
+    warehouse: process.env.WAREHOUSE || '',
+    appTitle: uiConfig.appTitle || 'Cortex Agent<br>REST API',
+    maxConversations: uiConfig.maxConversations,
+    maxMessagesPerConversation: uiConfig.maxMessagesPerConversation,
+    presets: Array.isArray(uiConfig.presets) ? uiConfig.presets : []
   });
 });
 

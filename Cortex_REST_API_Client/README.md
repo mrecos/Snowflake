@@ -13,7 +13,7 @@ This application provides a clean, minimal web interface for interacting with an
 **✨ Key Features:**
 - **Modern minimalist UI** - Clean, airy design with all-white backgrounds and strategic blue accents
 - **Chat-style interface** - Natural conversation flow with message bubbles (like ChatGPT/Claude)
-- **Fully configurable** - Agent name, app title, preset questions, and storage limits via `public/config.json`
+- **Fully configurable** - UI branding, presets, and storage limits via `public/config.json`; Snowflake agent connection via backend `.env`
 - **Secure** - PAT token stored in backend `.env`, never exposed to browser
 - **Multi-turn conversations** - Maintains context with full conversation history
 - **Conversation history** - Shows 5 most recent chats in sidebar with text wrapping
@@ -23,8 +23,41 @@ This application provides a clean, minimal web interface for interacting with an
 - **Dynamic feedback** - Rotating thinking messages ("Querying Snowflake...", "Processing results...", etc.)
 - **Keyboard shortcuts** - Press Enter to send, Shift+Enter for new line
 - **Instant display** - User messages appear immediately while agent processes
-- **Shareable** - Coworkers just edit 2 config files, no code changes needed
+- **Shareable** - Coworkers only update `backend/.env` and `public/config.json`, no code changes needed
 - **Brand customizable** - Custom app title for white-labeling (e.g., "Acme Corp AI Assistant")
+
+---
+
+## Quick Start
+
+**Prerequisites:** Node.js 18+, Snowflake account with a Cortex Agent, and a Personal Access Token (PAT).
+
+**First time setup?** See [DEPLOYMENT.md](./DEPLOYMENT.md) for complete instructions on creating your agent, generating a PAT, and initial configuration.
+
+**Already configured?** Just run:
+
+1. **Configure `backend/.env`** with Snowflake credentials + agent name:
+   ```bash
+   SNOWFLAKE_ACCOUNT_URL=https://your-account.snowflakecomputing.com
+   AGENT_NAME=YOUR_AGENT_NAME
+   AGENT_DB=YOUR_DATABASE
+   AGENT_SCHEMA=YOUR_SCHEMA
+   WAREHOUSE=YOUR_WAREHOUSE
+   AUTH_TOKEN=sf-pat-your-token-here
+   ```
+
+2. **(Optional) Customize `public/config.json`** for branding, presets, and storage limits
+
+3. **Install and start:**
+   ```bash
+   cd backend
+   npm install
+   npm start
+   ```
+
+4. **Open browser:** `http://localhost:5173`
+
+5. **Use the app:** Press Enter to send questions, Shift+Enter for multi-line
 
 ---
 
@@ -70,7 +103,7 @@ Cortex_REST_API_Client/
 │   ├── index.html            # Minimalist UI with sidebar navigation
 │   ├── styles.css            # All-white design with Snowflake Blue accents
 │   ├── app.js                # Frontend logic (conversations, dynamic feedback)
-│   ├── config.json           # Agent name, app title, and presets (customize!)
+│   ├── config.json           # UI preferences (branding, presets, storage limits)
 │   ├── config.example.json   # Example config template
 │   └── snow_sage1.png        # Logo image (optional)
 │
@@ -114,6 +147,7 @@ Minimal Express proxy that:
 
 **Routes:**
 - `GET /api/health` — Returns config status (checks for missing env vars)
+- `GET /api/app-config` — Returns merged backend/UI configuration for the frontend
 - `GET /api/agent/:name/describe` — Describes an agent (verifies it exists)
 - `POST /api/agent/:name/run` — **Main endpoint**: calls agent:run and parses streaming response
 
@@ -142,7 +176,7 @@ Clean, minimalist UI with:
 
 Frontend logic:
 - Auto-checks health on page load
-- Loads configuration from `config.json` (including custom app title)
+- Loads configuration from `/api/app-config` (environment + UI merge)
 - Manages conversation history in localStorage (shows 5 most recent)
 - Full conversation history sent to agent for context (not just thread IDs)
 - Chat-style message rendering with animated thinking indicator
@@ -157,15 +191,12 @@ Frontend logic:
 
 ### `public/config.json`
 
-User-facing configuration:
+User-facing configuration (UI only):
 ```json
 {
   "appTitle": "Cortex Agent<br>REST API",
   "maxConversations": 10,
   "maxMessagesPerConversation": 10,
-  "agentName": "YOUR_AGENT_NAME",
-  "agentDatabase": "YOUR_DB",
-  "agentSchema": "YOUR_SCHEMA",
   "presets": [
     {
       "label": "Example question",
@@ -181,11 +212,11 @@ User-facing configuration:
   - Example: "Acme Corp<br>AI Assistant" for white-labeling
 - `maxConversations`: Max number of conversations to keep in localStorage before pruning (default `10`)
 - `maxMessagesPerConversation`: Max messages retained per conversation for context (default `10`)
-- `agentName`: Your agent's name (must match the agent in Snowflake)
-- `agentDatabase`, `agentSchema`: Location of your agent
 - `presets`: Array of preset questions
   - `label`: Button text shown in UI
   - `prompt`: Question text sent to agent when clicked
+
+Snowflake connection settings (`SNOWFLAKE_ACCOUNT_URL`, `AGENT_NAME`, `AGENT_DB`, `AGENT_SCHEMA`, `WAREHOUSE`, `AUTH_TOKEN`) now live exclusively in `backend/.env`. The frontend consumes a merged payload from `/api/app-config` so those values never ship as static assets.
 
 See [CONFIG_CUSTOMIZATION.md](./CONFIG_CUSTOMIZATION.md) for advanced customization options.
 
@@ -361,26 +392,14 @@ This client works with any Snowflake Cortex Agent. Example use cases:
 
 ---
 
-## Quick Start
-
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed setup instructions.
-
-**TL;DR:**
-1. Configure `backend/.env` with Snowflake credentials
-2. Configure `public/config.json` with your agent name, app title, and presets
-3. `cd backend && npm install && npm start`
-4. Open `http://localhost:5173`
-5. Press Enter to send questions, Shift+Enter for multi-line
-
----
-
 ## Version History
 
-**v3.6 (Current)** - Storage Controls & SQL Rendering Polish
-- Configurable limits for saved conversations/messages in `config.json`
+**v3.6 (Current)** - Storage Controls, SQL Rendering & Config Unification
+- Configurable limits for saved conversations/messages in `public/config.json`
 - Highlight.js syntax highlighting with preserved multiline SQL formatting
 - Markdown heading rendering (no stray `#` characters)
 - Refined table styling with smaller type, zebra striping, and rounded borders
+- `/api/app-config` merges backend `.env` agent settings with UI preferences so values live in a single source
 
 **v3.5** - Dynamic Thinking Messages & Enter Key
 - Rotating thinking messages (8 different messages, updates every 8s)

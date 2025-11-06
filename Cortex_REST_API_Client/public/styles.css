@@ -823,7 +823,9 @@ details[open] summary {
   }
 }
 
-/* ===== SQL CODE BLOCK STYLING ===== */
+/* ===== CODE BLOCK STYLING ===== */
+
+/* SQL Code Blocks */
 .sql-code-block {
   background: #f6f8fa;
   border: 1px solid #d0d7de;
@@ -846,6 +848,12 @@ details[open] summary {
   white-space: pre-wrap;
 }
 
+/* Python Code Blocks */
+.python-code-block {
+  border-left: 3px solid #3776ab;  /* Python blue accent */
+}
+
+/* Inline Code */
 .inline-code {
   font-family: 'Courier New', Courier, monospace;
   background: #f1f4f7;
@@ -856,9 +864,11 @@ details[open] summary {
   border: 1px solid var(--border-gray);
 }
 
+/* Generic Code Blocks (JavaScript, Bash, etc.) */
 .code-block {
   background: #f6f8fa;
   border: 1px solid #d0d7de;
+  border-left: 3px solid #6c757d;  /* Neutral gray accent */
   border-radius: 6px;
   padding: 16px;
   margin: 12px 0;
@@ -878,7 +888,9 @@ details[open] summary {
 }
 
 /* Override highlight.js background to match our styling */
-.sql-code-block .hljs {
+.sql-code-block .hljs,
+.python-code-block .hljs,
+.code-block .hljs {
   background: transparent;
   padding: 0;
 }

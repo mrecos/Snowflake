@@ -35,6 +35,13 @@
 - Added `.code-block` styling and updated `.sql-code-block`
 - Refined table typography, zebra striping, and container borders
 
+**`server.js`:**
+- Added `/api/app-config` endpoint to merge `.env` agent settings with UI preferences
+- Required `AGENT_NAME` env var and centralized loading of `public/config.json`
+
+**`public/config.json`:**
+- Now contains UI-only data (branding, presets, storage limits) to avoid duplicating Snowflake identifiers stored in `.env`
+
 
 ## v3.5 - Dynamic Thinking Messages & Enter Key (November 5, 2025)
 

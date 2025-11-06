@@ -412,7 +412,10 @@ function clearAllHistory() {
 
 async function loadConfig() {
   try {
-    const resp = await fetch('/config.json');
+    const resp = await fetch('/api/app-config');
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
     config = await resp.json();
     console.log('[config] Loaded:', config);
     
@@ -424,7 +427,7 @@ async function loadConfig() {
     
     // Generate preset buttons
     const container = document.getElementById('presetsContainer');
-    config.presets.forEach(preset => {
+    (config.presets || []).forEach(preset => {
       const btn = document.createElement('button');
       btn.className = 'btn';
       btn.textContent = preset.label;
@@ -437,7 +440,7 @@ async function loadConfig() {
     return config;
   } catch (e) {
     console.error('[config] Failed to load:', e);
-    alert('Failed to load config.json - check console');
+    alert('Failed to load application config - check console');
     return null;
   }
 }
@@ -645,24 +648,35 @@ function renderTextBlock(text, targetEl) {
   wrapper.innerHTML = html;
   targetEl.appendChild(wrapper);
 
-  // Apply syntax highlighting to SQL code blocks
-  wrapper.querySelectorAll('code.language-sql').forEach(block => {
+  // Apply syntax highlighting to all code blocks
+  wrapper.querySelectorAll('code[class^="language-"]').forEach(block => {
     if (window.hljs) hljs.highlightElement(block);
   });
 }
 
 function renderCodeBlock(block) {
-  const language = block.language || '';
+  const language = (block.language || '').toLowerCase();
   let code = block.code || '';
   code = code.replace(/\r\n/g, '\n');
   code = dedent(code).trim();
 
   const escaped = escapeHtml(code);
 
+  // Map common languages to their code block styles
   if (language === 'sql') {
     return `<pre class="sql-code-block"><code class="language-sql">${escaped}</code></pre>`;
   }
+  
+  if (language === 'python' || language === 'py') {
+    return `<pre class="code-block python-code-block"><code class="language-python">${escaped}</code></pre>`;
+  }
+  
+  // Generic code block for other languages (javascript, bash, etc.)
+  if (language) {
+    return `<pre class="code-block"><code class="language-${language}">${escaped}</code></pre>`;
+  }
 
+  // No language specified
   return `<pre class="code-block"><code>${escaped}</code></pre>`;
 }
 

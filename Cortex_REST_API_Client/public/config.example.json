@@ -1,8 +1,8 @@
 {
-  "_comment": "Copy this file to config.json and customize for your agent",
-  "agentName": "YOUR_AGENT_NAME",
-  "agentDatabase": "YOUR_DATABASE",
-  "agentSchema": "YOUR_SCHEMA",
+  "_comment": "Copy this file to config.json and customize UI preferences (agent connection lives in backend/.env)",
+  "appTitle": "Cortex Agent<br>REST API",
+  "maxConversations": 10,
+  "maxMessagesPerConversation": 10,
   "presets": [
     {
       "label": "Clustering health",

@@ -28,6 +28,7 @@ Edit `backend/.env`:
 
 ```
 SNOWFLAKE_ACCOUNT_URL=https://<your_account>.snowflakecomputing.com
+AGENT_NAME=YOUR_AGENT
 AGENT_DB=YOUR_DATABASE
 AGENT_SCHEMA=YOUR_SCHEMA
 WAREHOUSE=YOUR_WAREHOUSE
@@ -36,6 +37,7 @@ AUTH_TOKEN=<your_PAT_token>
 
 **IMPORTANT:**
 - Replace `<your_account>` with your Snowflake account identifier
+- `AGENT_NAME` must match your Cortex agent exactly (case-sensitive)
 - Replace `YOUR_DATABASE`, `YOUR_SCHEMA`, `YOUR_WAREHOUSE` with actual values
 - The `AUTH_TOKEN` is a **Personal Access Token (PAT)** from Snowflake (see section 6 for creation steps)
 - Do NOT include "Bearer" prefix - just paste the token value
@@ -44,6 +46,7 @@ AUTH_TOKEN=<your_PAT_token>
 **Example:**
 ```
 SNOWFLAKE_ACCOUNT_URL=https://abc12345.us-east-1.snowflakecomputing.com
+AGENT_NAME=HACKTHON_SP_TEST_V1
 AGENT_DB=SNOWFLAKE_INTELLIGENCE
 AGENT_SCHEMA=AGENTS
 WAREHOUSE=DEMO_WH
@@ -52,45 +55,42 @@ AUTH_TOKEN=sf-pat-AbCdEf123456...
 
 ---
 
-## 3) Configure Frontend Settings
+## 3) Configure Frontend UI Settings (Optional)
 
-Copy the example config and customize for your agent:
+Copy the example config if you want to tweak branding, presets, or storage limits:
 
 ```bash
 cd public
 cp config.example.json config.json
 ```
 
-Edit `public/config.json` to match your agent:
+Edit `public/config.json` (no secrets here):
 
 ```json
 {
-  "agentName": "YOUR_AGENT_NAME",
-  "agentDatabase": "YOUR_DATABASE",
-  "agentSchema": "YOUR_SCHEMA",
+  "appTitle": "Cortex Agent<br>REST API",
+  "maxConversations": 10,
+  "maxMessagesPerConversation": 10,
   "presets": [
     {
       "label": "Example question",
       "prompt": "What can you help me with?"
-    },
-    {
-      "label": "Another question",
-      "prompt": "Show me recent activity"
     }
   ]
 }
 ```
 
 **Customization tips:**
-- `agentName`: Must exactly match your agent's name in Snowflake
-- `agentDatabase`, `agentSchema`: Must match where your agent is located
-- `presets`: Customize these for your use case!
+- `appTitle`: Branding text in the sidebar (HTML allowed, e.g. `<br>` for line breaks)
+- `maxConversations`: Maximum conversations stored in `localStorage`
+- `maxMessagesPerConversation`: Messages retained per conversation before pruning
+- `presets`: Customize for your use case!
   - `label`: Text shown on button in UI
-  - `prompt`: Question sent to agent when button is clicked
+  - `prompt`: Question sent to agent when clicked
   - Add as many presets as you want
 
 **To share with coworkers:**
-- They only need to edit `public/config.json` for their agent
+- They only need to edit `backend/.env` for connection details and (optionally) `public/config.json` for UI tweaks
 - No code changes required!
 - Presets can be customized per user/team
 
@@ -121,7 +121,7 @@ Open your browser to: **http://localhost:5173**
 The UI will automatically:
 - Check configuration health
 - Display status indicator (green = connected, red = config issue)
-- Load your agent name and presets from `config.json`
+- Load your agent name from the backend and presets from `public/config.json`
 
 ---
 
@@ -169,7 +169,7 @@ See: https://docs.snowflake.com/en/developer-guide/sql-api/guide
 
 In the UI, you should see:
 - **Status indicator** in top right (green dot = connected, red = issue)
-- **Your agent name** loaded from config.json
+- **Your agent name** pulled from backend `.env`
 - **Preset buttons** for quick questions
 
 Click **"Verify agent"** button to confirm:
@@ -370,8 +370,7 @@ curl http://localhost:5173/api/health
 ### "Agent not found"
 
 **Check:**
-- Agent name in `config.json` matches exactly (case-sensitive)
-- Database and schema names are correct
+- `AGENT_NAME`, `AGENT_DB`, and `AGENT_SCHEMA` in `backend/.env` match Snowflake exactly (case-sensitive)
 - Your role has access to the agent
 
 **Fix:**
@@ -438,7 +437,7 @@ Cortex_REST_API_Client/
 │   ├── index.html            # Main UI
 │   ├── styles.css            # Styles
 │   ├── app.js                # Frontend logic
-│   ├── config.json           # Agent config (customize this!)
+│   ├── config.json           # UI preferences (branding, presets, storage limits)
 │   ├── config.example.json   # Template
 │   └── snow_sage1.png        # Logo
 ├── DEPLOYMENT.md             # This file
@@ -476,7 +475,7 @@ Once you're up and running:
 1. **Customize presets** - Add questions specific to your agent's capabilities
 2. **Test multi-turn** - Try follow-up questions to see context maintained
 3. **Browse history** - Use conversation history to revisit past interactions
-4. **Share with team** - Have coworkers edit `config.json` for their agents
+4. **Share with team** - Provide coworkers with `.env` values for their agent and (optionally) a tailored `config.json`
 5. **Explore responses** - Check raw JSON to understand agent behavior
 
 **Optional enhancements:**

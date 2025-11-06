@@ -2,7 +2,11 @@
 
 ## Overview
 
-The application can be customized through the `public/config.json` file. This allows you to personalize the interface for different customers or deployments without modifying code.
+The application exposes two layers of configuration:
+- **`backend/.env`** — Snowflake connection + agent metadata (never shipped to the browser)
+- **`public/config.json`** — UI preferences (branding, presets, storage limits)
+
+Together they let you personalize deployments without modifying code.
 
 ---
 
@@ -99,53 +103,31 @@ Caps the number of messages saved per conversation. Older messages are trimmed f
 
 ---
 
-### Agent Configuration
+### Agent Connection (backend/.env)
 
-**Property:** `agentName`  
-**Type:** String  
-**Required:** Yes
+Snowflake agent settings now live exclusively in `backend/.env` so they never ship to the browser. Set the following environment variables:
 
-The name of the Snowflake Cortex Agent to interact with.
+| Variable | Description |
+| --- | --- |
+| `SNOWFLAKE_ACCOUNT_URL` | Full account URL (e.g. `https://abc12345.us-east-1.snowflakecomputing.com`) |
+| `AGENT_NAME` | The Cortex agent to call (case-sensitive) |
+| `AGENT_DB` | Database containing the agent |
+| `AGENT_SCHEMA` | Schema containing the agent |
+| `WAREHOUSE` | Warehouse used when the agent executes queries |
+| `AUTH_TOKEN` | Personal Access Token (PAT) used for authentication |
 
-**Example:**
-```json
-{
-  "agentName": "MY_CUSTOMER_AGENT",
-  ...
-}
+Example `.env` snippet:
+
+```bash
+SNOWFLAKE_ACCOUNT_URL=https://abc12345.us-east-1.snowflakecomputing.com
+AGENT_NAME=HACKTHON_SP_TEST_V1
+AGENT_DB=SNOWFLAKE_INTELLIGENCE
+AGENT_SCHEMA=AGENTS
+WAREHOUSE=DEMO_WH
+AUTH_TOKEN=sf-pat-AbCdEf123456...
 ```
 
----
-
-**Property:** `agentDatabase`  
-**Type:** String  
-**Required:** Yes
-
-The database where the agent is defined.
-
-**Example:**
-```json
-{
-  "agentDatabase": "PRODUCTION_DB",
-  ...
-}
-```
-
----
-
-**Property:** `agentSchema`  
-**Type:** String  
-**Required:** Yes
-
-The schema where the agent is defined.
-
-**Example:**
-```json
-{
-  "agentSchema": "AGENTS",
-  ...
-}
-```
+Restart the backend after changing `.env` so the updates take effect.
 
 ---
 
@@ -205,9 +187,6 @@ Defines quick-access preset prompts that appear in the sidebar.
   "appTitle": "Cortex Agent<br>REST API",
   "maxConversations": 10,
   "maxMessagesPerConversation": 10,
-  "agentName": "HACKTHON_SP_TEST_V1",
-  "agentDatabase": "SNOWFLAKE_INTELLIGENCE",
-  "agentSchema": "AGENTS",
   "presets": [
     {
       "label": "Explore Table clustering health",
@@ -240,9 +219,8 @@ Defines quick-access preset prompts that appear in the sidebar.
 ```json
 {
   "appTitle": "Acme Analytics<br>AI Assistant",
-  "agentName": "ACME_DATA_AGENT",
-  "agentDatabase": "ACME_PRODUCTION",
-  "agentSchema": "AI_AGENTS",
+  "maxConversations": 20,
+  "maxMessagesPerConversation": 15,
   "presets": [
     {
       "label": "Sales Overview",
@@ -258,6 +236,14 @@ Defines quick-access preset prompts that appear in the sidebar.
     }
   ]
 }
+```
+
+Corresponding `.env` values for this customer might look like:
+
+```bash
+AGENT_NAME=ACME_DATA_AGENT
+AGENT_DB=ACME_PRODUCTION
+AGENT_SCHEMA=AI_AGENTS
 ```
 
 ---
@@ -362,7 +348,7 @@ Open browser DevTools (F12) → Console to verify.
 - Check console for errors
 
 **Agent not found:**
-- Verify `agentName`, `agentDatabase`, `agentSchema` are correct
+- Confirm `AGENT_NAME`, `AGENT_DB`, `AGENT_SCHEMA` in `backend/.env` match Snowflake
 - Click "Verify Agent" button to test
 - Check backend/.env configuration
 
@@ -486,11 +472,11 @@ python -m json.tool public/config.json
 ## Summary
 
 - **`appTitle`** controls sidebar branding (HTML allowed)
-- **`agentName`**, **`agentDatabase`**, **`agentSchema`** configure the agent
+- **`maxConversations` / `maxMessagesPerConversation`** tune localStorage usage
 - **`presets`** define quick-access prompts
-- All settings are in `public/config.json`
-- Changes take effect on page refresh
-- Default fallback: "Cortex Agent<br>REST API"
+- UI settings live in `public/config.json`
+- Snowflake connection lives in `backend/.env`
+- Changes take effect on page refresh / server restart (for `.env`)
 
 ---
 
