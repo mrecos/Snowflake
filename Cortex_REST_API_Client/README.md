@@ -107,8 +107,14 @@ Cortex_REST_API_Client/
 │   ├── config.example.json   # Example config template
 │   └── snow_sage1.png        # Logo image (optional)
 │
+├── docs/
+│   ├── CONFIG_CUSTOMIZATION.md  # Advanced configuration guide
+│   ├── TESTING.md               # Testing instructions
+│   └── archive/                 # Version notes and summaries
+│
+├── README.md                 # This file
 ├── DEPLOYMENT.md             # Setup and deployment guide
-└── README.md                 # This file
+└── CHANGELOG.md              # Version history
 ```
 
 ---
@@ -218,7 +224,7 @@ User-facing configuration (UI only):
 
 Snowflake connection settings (`SNOWFLAKE_ACCOUNT_URL`, `AGENT_NAME`, `AGENT_DB`, `AGENT_SCHEMA`, `WAREHOUSE`, `AUTH_TOKEN`) now live exclusively in `backend/.env`. The frontend consumes a merged payload from `/api/app-config` so those values never ship as static assets.
 
-See [CONFIG_CUSTOMIZATION.md](./CONFIG_CUSTOMIZATION.md) for advanced customization options.
+See [CONFIG_CUSTOMIZATION.md](./docs/CONFIG_CUSTOMIZATION.md) for advanced customization options.
 
 ---
 

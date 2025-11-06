@@ -182,7 +182,7 @@
 - `.main-content`: wider padding and max-width
 
 **New File:**
-- `CONFIG_CUSTOMIZATION.md` - Complete customization guide
+- `docs/CONFIG_CUSTOMIZATION.md` - Complete customization guide
 
 ---
 
