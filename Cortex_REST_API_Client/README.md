@@ -2,6 +2,8 @@
 
 A lightweight, configurable web application for interacting with Snowflake Cortex Agents via REST API. Built for easy customization and sharing with coworkers.
 
+![Cortex Agent REST API Client](./images/example.png)
+
 Reference: [Cortex Agents Run API](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents-run)
 
 ---
