@@ -81,6 +81,24 @@ Powered by Cortex  (smaller, lighter text)
 
 ---
 
+### Conversation Retention Limits
+
+**Property:** `maxConversations`  
+**Type:** Number  
+**Default:** `10`
+
+Controls how many conversations are stored in `localStorage`. When the limit is exceeded, the oldest conversations are pruned automatically. Lower this number for kiosks/shared machines; increase it when you need longer history.
+
+---
+
+**Property:** `maxMessagesPerConversation`  
+**Type:** Number  
+**Default:** `10`
+
+Caps the number of messages saved per conversation. Older messages are trimmed from the start, keeping the most recent exchanges (and preserving agent context) while avoiding runaway storage growth.
+
+---
+
 ### Agent Configuration
 
 **Property:** `agentName`  
@@ -185,6 +203,8 @@ Defines quick-access preset prompts that appear in the sidebar.
 ```json
 {
   "appTitle": "Cortex Agent<br>REST API",
+  "maxConversations": 10,
+  "maxMessagesPerConversation": 10,
   "agentName": "HACKTHON_SP_TEST_V1",
   "agentDatabase": "SNOWFLAKE_INTELLIGENCE",
   "agentSchema": "AGENTS",

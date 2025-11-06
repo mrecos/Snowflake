@@ -24,7 +24,7 @@ const welcomeH1 = document.getElementById('welcomeH1');
 // ===== STATE =====
 let config = null; // Loaded from config.json
 let currentConversation = null; // { id, thread_id, parent_message_id, title, messages, created_at, updated_at }
-const MAX_CONVERSATIONS = 20;
+// MAX_CONVERSATIONS now loaded from config.json (config.maxConversations || 10)
 const STORAGE_PREFIX = 'snowsage_conversation_';
 const STORAGE_LIST_KEY = 'snowsage_conversation_list';
 
@@ -179,11 +179,17 @@ function loadConversation(id) {
 
 // Save current conversation
 function saveCurrentConversation() {
-  if (!currentConversation) return;
+  if (!currentConversation || !config) return;
   
   try {
     // Update timestamp
     currentConversation.updated_at = new Date().toISOString();
+    
+    // Limit messages per conversation to prevent storage bloat
+    const maxMessages = config.maxMessagesPerConversation || 10;
+    if (currentConversation.messages.length > maxMessages) {
+      currentConversation.messages = currentConversation.messages.slice(-maxMessages);
+    }
     
     // Save conversation data
     localStorage.setItem(STORAGE_PREFIX + currentConversation.id, JSON.stringify(currentConversation));
@@ -194,12 +200,13 @@ function saveCurrentConversation() {
       list.unshift(currentConversation.id);
       
       // Prune old conversations if we exceed max
-      if (list.length > MAX_CONVERSATIONS) {
-        const removed = list.slice(MAX_CONVERSATIONS);
+      const maxConversations = config.maxConversations || 10;
+      if (list.length > maxConversations) {
+        const removed = list.slice(maxConversations);
         removed.forEach(id => {
           localStorage.removeItem(STORAGE_PREFIX + id);
         });
-        list = list.slice(0, MAX_CONVERSATIONS);
+        list = list.slice(0, maxConversations);
       }
       
       saveConversationList(list);
@@ -293,10 +300,11 @@ function displayConversationMessages() {
     }
   });
   
-  // Show raw JSON of last message
-  const lastMsg = currentConversation.messages[currentConversation.messages.length - 1];
-  if (lastMsg && lastMsg.rawResponse) {
-    resultRawEl.textContent = JSON.stringify(lastMsg.rawResponse, null, 2);
+  // Show latest raw response if available (only kept for current session)
+  if (window.lastRawResponse) {
+    resultRawEl.textContent = JSON.stringify(window.lastRawResponse, null, 2);
+  } else {
+    resultRawEl.textContent = 'No response data available (only latest response is kept for debugging)';
   }
   
   // Scroll to bottom after loading conversation
@@ -519,22 +527,21 @@ function renderMessageContent(events, targetEl) {
     return;
   }
 
+  let textBuffer = '';
+  const flushTextBuffer = () => {
+    if (!textBuffer) return;
+    renderTextBlock(textBuffer, targetEl);
+    textBuffer = '';
+  };
+
   // Render each content item
   finalMsg.content.forEach((item, idx) => {
     if (item.type === 'text' && item.text) {
-      const p = document.createElement('div');
-      // Parse markdown tables first, then handle other markdown
-      let html = parseMarkdownTables(item.text);
-      html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-      html = html.replace(/##\s+(.+)/g, '<h3 style="margin-top: 16px; margin-bottom: 8px;">$1</h3>');
-      html = html.replace(/```sql\n([^`]+)```/g, '<pre style="background: #f5f7f9; padding: 8px; border-radius: 4px; overflow-x: auto;"><code>$1</code></pre>');
-      html = html.replace(/```([^`]+)```/g, '<pre style="background: #f5f7f9; padding: 8px; border-radius: 4px; overflow-x: auto;"><code>$1</code></pre>');
-      html = html.replace(/\n/g, '<br>');
-      p.innerHTML = html;
-      targetEl.appendChild(p);
+      textBuffer += item.text;
     }
     
     else if (item.type === 'tool_result' && item.tool_result) {
+      flushTextBuffer();
       const result = item.tool_result;
       if (result.content && result.content[0] && result.content[0].json && result.content[0].json.result_set) {
         const rs = result.content[0].json.result_set;
@@ -544,6 +551,7 @@ function renderMessageContent(events, targetEl) {
     }
     
     else if (item.type === 'chart' && item.chart && item.chart.chart_spec) {
+      flushTextBuffer();
       const chartDiv = document.createElement('div');
       chartDiv.className = 'chart-container';
       chartDiv.id = `chart-${Date.now()}-${idx}`;
@@ -589,6 +597,105 @@ function renderMessageContent(events, targetEl) {
       }
     }
   });
+
+  flushTextBuffer();
+}
+
+// Render buffered markdown/text content into the target element
+function renderTextBlock(text, targetEl) {
+  if (!text || !text.trim()) return;
+
+  // Convert markdown tables to HTML first (preserves non-table content)
+  let html = parseMarkdownTables(text);
+
+  // Extract fenced code blocks so we can handle them separately
+  const codeBlocks = [];
+  html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
+    const idx = codeBlocks.length;
+    codeBlocks.push({
+      language: (lang || '').toLowerCase(),
+      code
+    });
+    return `@@CODE_BLOCK_${idx}@@`;
+  });
+
+  // Basic markdown replacements
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/^###\s+(.+)$/gm, '<h4 style="margin-top: 16px; margin-bottom: 8px; font-weight: bold;">$1</h4>');
+  html = html.replace(/^##\s+(.+)$/gm, '<h3 style="margin-top: 20px; margin-bottom: 10px;">$1</h3>');
+  html = html.replace(/^#\s+(.+)$/gm, '<h2 style="margin-top: 24px; margin-bottom: 12px;">$1</h2>');
+  html = html.replace(/^#\s*$/gm, '');
+
+  // Inline code formatting
+  html = html.replace(/`([^`]+)`/g, (match, code) => {
+    return `<code class="inline-code">${escapeHtml(code)}</code>`;
+  });
+
+  // Convert remaining newlines to <br> for readability
+  html = html.replace(/\n/g, '<br>');
+
+  // Reinsert formatted code blocks
+  codeBlocks.forEach((block, idx) => {
+    const placeholder = `@@CODE_BLOCK_${idx}@@`;
+    html = html.replace(placeholder, renderCodeBlock(block));
+  });
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'message-text-block';
+  wrapper.innerHTML = html;
+  targetEl.appendChild(wrapper);
+
+  // Apply syntax highlighting to SQL code blocks
+  wrapper.querySelectorAll('code.language-sql').forEach(block => {
+    if (window.hljs) hljs.highlightElement(block);
+  });
+}
+
+function renderCodeBlock(block) {
+  const language = block.language || '';
+  let code = block.code || '';
+  code = code.replace(/\r\n/g, '\n');
+  code = dedent(code).trim();
+
+  const escaped = escapeHtml(code);
+
+  if (language === 'sql') {
+    return `<pre class="sql-code-block"><code class="language-sql">${escaped}</code></pre>`;
+  }
+
+  return `<pre class="code-block"><code>${escaped}</code></pre>`;
+}
+
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function dedent(str) {
+  const lines = str.split('\n');
+  let minIndent = null;
+
+  lines.forEach(line => {
+    const match = line.match(/^\s*(?=\S)/);
+    if (match) {
+      const indent = match[0].length;
+      if (minIndent === null || indent < minIndent) {
+        minIndent = indent;
+      }
+    }
+  });
+
+  if (!minIndent || minIndent === 0) {
+    return lines.join('\n');
+  }
+
+  return lines
+    .map(line => (line.startsWith(' '.repeat(minIndent)) ? line.slice(minIndent) : line))
+    .join('\n');
 }
 
 // Convert markdown tables to HTML tables
@@ -860,7 +967,8 @@ document.getElementById('btnSend').onclick = async () => {
       }) 
     });
     
-    // Store raw JSON for debugging
+    // Store latest raw JSON in memory for debugging (not in localStorage)
+    window.lastRawResponse = resp;
     resultRawEl.textContent = JSON.stringify(resp, null, 2);
     
     if (resp.ok && resp.events) {
@@ -872,11 +980,10 @@ document.getElementById('btnSend').onclick = async () => {
         currentConversation.parent_message_id = resp.parent_message_id;
       }
       
-      // Add assistant message to conversation
+      // Add assistant message to conversation (without rawResponse to save storage)
       const assistantMessage = {
         role: 'assistant',
         events: resp.events,
-        rawResponse: resp,
         timestamp: new Date().toISOString()
       };
       currentConversation.messages.push(assistantMessage);

@@ -1,5 +1,7 @@
 {
   "appTitle": "Cortex Agent<br>REST API",
+  "maxConversations": 10,
+  "maxMessagesPerConversation": 10,
   "agentName": "HACKTHON_SP_TEST_V1",
   "agentDatabase": "SNOWFLAKE_INTELLIGENCE",
   "agentSchema": "AGENTS",

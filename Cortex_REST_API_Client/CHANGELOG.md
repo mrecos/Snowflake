@@ -1,5 +1,41 @@
 # Changelog — Snowflake Cortex Agent REST API Client
 
+## v3.6 - Storage Controls & SQL Rendering Polish (November 6, 2025)
+
+### Enhancements
+
+**Configurable Conversation Retention:**
+- New `maxConversations` and `maxMessagesPerConversation` keys in `config.json`
+- Automatically prunes old conversations/messages when limits are exceeded
+- Keeps localStorage footprint predictable for long-running demos
+
+**High-Fidelity Agent Responses:**
+- Highlight.js syntax highlighting for SQL/code blocks
+- Preserves multiline SQL formatting streamed from the agent
+- Markdown headings (`#`, `##`, `###`) now render as styled titles (no stray `#`)
+- Graceful fallback for non-SQL code blocks
+
+**Data Table Refinements:**
+- Reduced font size (12pt) and tighter padding for higher information density
+- Soft blue table headers, zebra striping, rounded corners, and subtle borders
+- Hover states retained for readability
+
+### Technical Changes
+
+**`app.js`:**
+- Buffered streaming renderer combines text chunks before parsing markdown
+- New `renderTextBlock`, `renderCodeBlock`, `escapeHtml`, and `dedent` helpers
+- Applies highlight.js to SQL code blocks and honours heading markdown
+- Respects configurable storage limits when saving conversations
+
+**`index.html`:**
+- Loads highlight.js core, SQL language module, and GitHub theme from CDN
+
+**`styles.css`:**
+- Added `.code-block` styling and updated `.sql-code-block`
+- Refined table typography, zebra striping, and container borders
+
+
 ## v3.5 - Dynamic Thinking Messages & Enter Key (November 5, 2025)
 
 ### Enhancements

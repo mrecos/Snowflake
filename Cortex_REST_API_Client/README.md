@@ -13,11 +13,13 @@ This application provides a clean, minimal web interface for interacting with an
 **✨ Key Features:**
 - **Modern minimalist UI** - Clean, airy design with all-white backgrounds and strategic blue accents
 - **Chat-style interface** - Natural conversation flow with message bubbles (like ChatGPT/Claude)
-- **Fully configurable** - Agent name, app title, and preset questions via `public/config.json`
+- **Fully configurable** - Agent name, app title, preset questions, and storage limits via `public/config.json`
 - **Secure** - PAT token stored in backend `.env`, never exposed to browser
 - **Multi-turn conversations** - Maintains context with full conversation history
 - **Conversation history** - Shows 5 most recent chats in sidebar with text wrapping
-- **Rich rendering** - Formatted text, data tables (with scroll hints), and interactive Vega-Lite charts
+- **Rich rendering** - Markdown headings, formatted text, data tables (with scroll hints), and interactive Vega-Lite charts
+- **SQL that reads beautifully** - Highlight.js syntax highlighting plus preserved multiline formatting for agent SQL/code blocks
+- **Configurable history retention** - Tune max saved conversations/messages to keep localStorage in check
 - **Dynamic feedback** - Rotating thinking messages ("Querying Snowflake...", "Processing results...", etc.)
 - **Keyboard shortcuts** - Press Enter to send, Shift+Enter for new line
 - **Instant display** - User messages appear immediately while agent processes
@@ -147,10 +149,11 @@ Frontend logic:
 - Dynamic thinking messages that rotate every 8 seconds
 - Auto-scroll to latest message with floating scroll button
 - Keyboard shortcuts (Enter to send, Shift+Enter for new line)
-- Renders responses with markdown, tables (with scroll hints), and Vega-Lite charts
+- Renders responses with markdown, tables (with scroll hints), highlight.js SQL blocks, and Vega-Lite charts
 - Instant user message display for immediate feedback
 - Updates status indicator with success green color
 - Thread indicator shows message count and conversation turns
+- Configurable storage pruning (max conversations/messages) with automatic cleanup when limits are exceeded
 
 ### `public/config.json`
 
@@ -158,6 +161,8 @@ User-facing configuration:
 ```json
 {
   "appTitle": "Cortex Agent<br>REST API",
+  "maxConversations": 10,
+  "maxMessagesPerConversation": 10,
   "agentName": "YOUR_AGENT_NAME",
   "agentDatabase": "YOUR_DB",
   "agentSchema": "YOUR_SCHEMA",
@@ -174,6 +179,8 @@ User-facing configuration:
 - `appTitle`: Custom branding text (HTML allowed, use `<br>` for line breaks)
   - Default: "Cortex Agent<br>REST API"
   - Example: "Acme Corp<br>AI Assistant" for white-labeling
+- `maxConversations`: Max number of conversations to keep in localStorage before pruning (default `10`)
+- `maxMessagesPerConversation`: Max messages retained per conversation for context (default `10`)
 - `agentName`: Your agent's name (must match the agent in Snowflake)
 - `agentDatabase`, `agentSchema`: Location of your agent
 - `presets`: Array of preset questions
@@ -369,7 +376,13 @@ See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed setup instructions.
 
 ## Version History
 
-**v3.5 (Current)** - Dynamic Thinking Messages & Enter Key
+**v3.6 (Current)** - Storage Controls & SQL Rendering Polish
+- Configurable limits for saved conversations/messages in `config.json`
+- Highlight.js syntax highlighting with preserved multiline SQL formatting
+- Markdown heading rendering (no stray `#` characters)
+- Refined table styling with smaller type, zebra striping, and rounded borders
+
+**v3.5** - Dynamic Thinking Messages & Enter Key
 - Rotating thinking messages (8 different messages, updates every 8s)
 - Enter key to submit, Shift+Enter for new line
 - Smooth fade transitions between messages
