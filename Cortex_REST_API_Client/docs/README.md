@@ -8,6 +8,8 @@ This directory contains additional documentation and reference materials for the
 
 - **[CONFIG_CUSTOMIZATION.md](./CONFIG_CUSTOMIZATION.md)** - Complete guide to customizing the application's configuration, including branding, agent settings, presets, and storage limits.
 
+- **[SPCS_DEPLOYMENT.md](./SPCS_DEPLOYMENT.md)** - Comprehensive guide to deploying the application as a containerized service in Snowpark Container Services (SPCS), including architecture, deployment steps, monitoring, cost optimization, and troubleshooting.
+
 - **[TESTING.md](./TESTING.md)** - Instructions for testing the application and troubleshooting common issues.
 
 ### Archive

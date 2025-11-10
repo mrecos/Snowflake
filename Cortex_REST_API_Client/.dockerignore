@@ -1,0 +1,44 @@
+# Node modules (will be installed in container)
+node_modules/
+backend/node_modules/
+
+# Environment files (secrets managed via SPCS)
+.env
+backend/.env
+*.env
+
+# Documentation and archive files
+docs/
+images/
+*.md
+!README.md
+
+# Git files
+.git/
+.gitignore
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build and log files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test files
+*.test.js
+__tests__/
+
+# CI/CD files
+.github/
+.gitlab-ci.yml
+

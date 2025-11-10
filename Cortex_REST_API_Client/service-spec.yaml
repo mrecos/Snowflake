@@ -1,0 +1,62 @@
+# Snowpark Container Services - Service Specification
+# Cortex Agent REST API Client
+#
+# This specification defines the service configuration for deploying
+# the Cortex Agent REST API Client in Snowpark Container Services.
+
+spec:
+  containers:
+  - name: cortex-agent-app
+    # IMPORTANT: Replace <DATABASE> and <SCHEMA> with your actual database and schema
+    image: /<DATABASE>/<SCHEMA>/cortex_agent_repo/cortex_agent_client:latest
+    env:
+      # Application port (standard for SPCS)
+      PORT: "8080"
+    
+    # Bind Snowflake secrets to environment variables
+    # Replace <DATABASE> and <SCHEMA> with your actual values
+    # NOTE: AUTH_TOKEN not needed - SPCS provides OAuth token automatically at /snowflake/session/token
+    secrets:
+    - snowflakeSecret: <DATABASE>.<SCHEMA>.cortex_agent_snowflake_url
+      secretKeyRef: secret_string
+      envVarName: SNOWFLAKE_ACCOUNT_URL
+    - snowflakeSecret: <DATABASE>.<SCHEMA>.cortex_agent_name
+      secretKeyRef: secret_string
+      envVarName: AGENT_NAME
+    - snowflakeSecret: <DATABASE>.<SCHEMA>.cortex_agent_db
+      secretKeyRef: secret_string
+      envVarName: AGENT_DB
+    - snowflakeSecret: <DATABASE>.<SCHEMA>.cortex_agent_schema
+      secretKeyRef: secret_string
+      envVarName: AGENT_SCHEMA
+    - snowflakeSecret: <DATABASE>.<SCHEMA>.cortex_agent_warehouse
+      secretKeyRef: secret_string
+      envVarName: WAREHOUSE
+    
+    resources:
+      requests:
+        memory: 2Gi
+        cpu: 1
+      limits:
+        memory: 3Gi
+        cpu: 2
+    
+    # Optional: Mount config.json from stage for runtime updates
+    volumeMounts:
+    - name: config-volume
+      mountPath: /app/public/config.json
+      subPath: config.json
+  
+  endpoints:
+  - name: web-ui
+    port: 8080
+    public: true
+    protocol: HTTP
+  
+  # Optional: Mount config from stage
+  volumes:
+  - name: config-volume
+    source: "@cortex_agent_config_stage"
+    uid: 1000
+    gid: 1000
+

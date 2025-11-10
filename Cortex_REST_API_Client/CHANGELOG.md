@@ -1,5 +1,130 @@
 # Changelog — Snowflake Cortex Agent REST API Client
 
+## v4.1 - SPCS OAuth Authentication (November 10, 2025)
+
+### Major Improvement
+
+**Automatic OAuth Authentication for SPCS:**
+- SPCS deployment now uses automatic OAuth token from `/snowflake/session/token`
+- No PAT token required for SPCS deployment (simplified secrets management)
+- **Bypasses IP restrictions and network policies** (uses Snowflake internal routing)
+- More secure: uses service identity instead of personal credentials
+- Local deployment unchanged: continues to use PAT token from `.env`
+
+### Technical Changes
+
+**`backend/server.js`:**
+- Added `getAuthHeaders()` function that auto-detects environment
+- SPCS mode: Reads OAuth token from `/snowflake/session/token` and adds `X-Snowflake-Authorization-Token-Type: OAUTH` header
+- Local mode: Uses `AUTH_TOKEN` from environment (backward compatible)
+- Updated health endpoint to show authentication method (`SPCS OAuth` vs `PAT Token`)
+- Enhanced startup logging to display authentication mode
+- Made `AUTH_TOKEN` optional in `REQUIRED_ENV` (only needed locally)
+
+**`deploy.sql`:**
+- Removed `cortex_agent_auth_token` secret (not needed for SPCS)
+- Added clear documentation that AUTH_TOKEN is not required
+- Updated service specification to bind only 5 secrets (down from 6)
+- Added comments explaining OAuth authentication
+
+**`service-spec.yaml`:**
+- Removed AUTH_TOKEN secret binding
+- Added documentation about automatic OAuth
+
+**`docs/SPCS_DEPLOYMENT.md`:**
+- Removed PAT token from prerequisites
+- Added "Authentication in SPCS" section explaining OAuth
+- Updated troubleshooting to remove PAT-related issues
+- Added OAuth verification steps
+- Clarified that only 5 secrets are needed
+
+### Benefits
+
+- ✅ **No network policy conflicts**: Works with strict IP restrictions
+- ✅ **Simplified deployment**: One less secret to manage
+- ✅ **More secure**: Service identity vs personal credentials
+- ✅ **Backward compatible**: Local deployment unchanged
+- ✅ **Production ready**: Uses Snowflake's recommended auth method for SPCS
+
+### References
+
+- Internal Snowflake doc: "Access Snowflake APIs from SPCS"
+- Uses same pattern as Cortex Search and Cortex Analyst in SPCS
+
+---
+
+## v4.0 - Snowpark Container Services Deployment (November 7, 2025)
+
+### Major Features
+
+**Production-Ready SPCS Deployment:**
+- Complete containerization support for deploying to Snowpark Container Services
+- Run application as a managed service directly within Snowflake
+- Public HTTPS endpoint accessible from anywhere
+- Auto-scaling compute pool (1-3 nodes, CPU_X64_S)
+- Auto-suspend after inactivity for cost efficiency
+- Secure secrets management for PAT tokens and configuration
+
+**Comprehensive Deployment Assets:**
+- `Dockerfile`: Multi-stage Node.js 18 Alpine build with health checks
+- `service-spec.yaml`: SPCS service specification with secrets integration
+- `deploy.sql`: Complete SQL script for all Snowflake objects (image repo, compute pool, network rules, secrets, service)
+- `docs/SPCS_DEPLOYMENT.md`: 700+ line comprehensive guide with manual Docker build instructions, troubleshooting, cost optimization, and security best practices
+
+**Key Capabilities:**
+- External access integration for outbound HTTPS to Snowflake REST API
+- Secret-based configuration (no credentials in container image)
+- Snowflake-managed SSL/TLS for public endpoint
+- Cost monitoring and auto-suspend configuration
+- Complete logging and metrics integration
+
+### Technical Implementation
+
+**New Files:**
+- `Dockerfile` with Node.js 18 Alpine, optimized for SPCS
+- `.dockerignore` to exclude dev files from image
+- `service-spec.yaml` defining container, secrets, endpoints, and resources
+- `deploy.sql` with step-by-step SQL for all SPCS resources
+- `docs/SPCS_DEPLOYMENT.md` with architecture diagrams, manual Docker build steps, monitoring, troubleshooting
+
+**Updated Files:**
+- `README.md`: Added SPCS deployment section to Quick Start, updated Project Structure
+- `DEPLOYMENT.md`: Updated to clarify local vs SPCS deployment options
+
+**Architecture Enhancements:**
+- Container runs on port 8080 (SPCS standard)
+- Secrets passed as environment variables via `secretKeyRef`
+- External access limited to Snowflake account URL only (secure by default)
+- Compute pool configured with auto-suspend (3600s default)
+- Service supports rolling updates without downtime
+
+### Deployment Options
+
+Users can now choose:
+1. **Local Development**: Node.js on laptop/desktop (existing method)
+2. **SPCS Production**: Containerized service in Snowflake (new)
+
+### Documentation
+
+**New Comprehensive Guide (`docs/SPCS_DEPLOYMENT.md`):**
+- Prerequisites and software requirements
+- Architecture diagrams with component descriptions
+- Step-by-step deployment (6 main steps)
+- Accessing public endpoints
+- Monitoring service health and logs
+- Cost management and optimization strategies
+- Troubleshooting common issues
+- Security considerations and best practices
+- Advanced topics (multi-region, custom domains, scaling)
+
+### References
+
+- [Snowpark Container Services Overview](https://docs.snowflake.com/en/developer-guide/snowpark-container-services/overview)
+- [SPCS Tutorial 1](https://docs.snowflake.com/en/developer-guide/snowpark-container-services/tutorials/tutorial-1)
+- [Cortex Agents REST API](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents-run)
+
+---
+
 ## v3.6 - Storage Controls & SQL Rendering Polish (November 6, 2025)
 
 ### Enhancements

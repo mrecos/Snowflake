@@ -1,6 +1,8 @@
 # Snowflake Cortex Agent REST API Client — Deployment Guide
 
-This guide shows how to run the web UI locally and connect it to your Snowflake Cortex Agent.
+This guide shows how to run the web UI **locally on your laptop/desktop** and connect it to your Snowflake Cortex Agent.
+
+> **📦 Looking for Production Deployment?** See [docs/SPCS_DEPLOYMENT.md](./docs/SPCS_DEPLOYMENT.md) to deploy this application as a containerized service in Snowpark Container Services with a public HTTPS endpoint.
 
 Reference: https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents-rest-api
 
@@ -40,6 +42,8 @@ AUTH_TOKEN=<your_PAT_token>
 - `AGENT_NAME` must match your Cortex agent exactly (case-sensitive)
 - Replace `YOUR_DATABASE`, `YOUR_SCHEMA`, `YOUR_WAREHOUSE` with actual values
 - The `AUTH_TOKEN` is a **Personal Access Token (PAT)** from Snowflake (see section 6 for creation steps)
+  - **Note:** AUTH_TOKEN is only required for **local deployment**
+  - SPCS deployment uses automatic OAuth authentication (no PAT needed)
 - Do NOT include "Bearer" prefix - just paste the token value
 - Keep this file secure and NEVER commit to version control
 
@@ -126,6 +130,8 @@ The UI will automatically:
 ---
 
 ## 6) Getting a Personal Access Token (AUTH_TOKEN)
+
+**Required for local deployment only** (SPCS deployment uses automatic OAuth authentication)
 
 **Recommended for this application: Use a Personal Access Token (PAT)**
 

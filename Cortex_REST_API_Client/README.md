@@ -36,6 +36,8 @@ This application provides a clean, minimal web interface for interacting with an
 
 **First time setup?** See [DEPLOYMENT.md](./DEPLOYMENT.md) for complete instructions on creating your agent, generating a PAT, and initial configuration.
 
+### Local Deployment (Development & Testing)
+
 **Already configured?** Just run:
 
 1. **Configure `backend/.env`** with Snowflake credentials + agent name:
@@ -60,6 +62,22 @@ This application provides a clean, minimal web interface for interacting with an
 4. **Open browser:** `http://localhost:5173`
 
 5. **Use the app:** Press Enter to send questions, Shift+Enter for multi-line
+
+### Snowpark Container Services Deployment (Production)
+
+Deploy as a managed containerized service directly within Snowflake:
+
+- **✅ No external infrastructure** - Runs entirely in your Snowflake account
+- **✅ Public HTTPS endpoint** - Accessible from anywhere with a Snowflake-managed URL
+- **✅ Auto-scaling** - Scales from 1-3 nodes based on load
+- **✅ Cost-efficient** - Auto-suspends after inactivity
+
+**Quick Deploy:**
+
+1. Build and push Docker image (see [SPCS_DEPLOYMENT.md](./docs/SPCS_DEPLOYMENT.md) for details)
+2. Execute `deploy.sql` in Snowflake to create the service
+
+**📘 Full Guide:** See [docs/SPCS_DEPLOYMENT.md](./docs/SPCS_DEPLOYMENT.md) for comprehensive step-by-step instructions, troubleshooting, and cost optimization.
 
 ---
 
@@ -111,11 +129,20 @@ Cortex_REST_API_Client/
 │
 ├── docs/
 │   ├── CONFIG_CUSTOMIZATION.md  # Advanced configuration guide
+│   ├── SPCS_DEPLOYMENT.md       # Snowpark Container Services deployment guide
 │   ├── TESTING.md               # Testing instructions
 │   └── archive/                 # Version notes and summaries
 │
+├── images/
+│   └── example.png           # Screenshot of the application
+│
+├── Dockerfile                # Container image definition for SPCS
+├── .dockerignore             # Docker build exclusions
+├── service-spec.yaml         # SPCS service specification
+├── deploy.sql                # SQL script to create SPCS resources
+│
 ├── README.md                 # This file
-├── DEPLOYMENT.md             # Setup and deployment guide
+├── DEPLOYMENT.md             # Local setup and deployment guide
 └── CHANGELOG.md              # Version history
 ```
 

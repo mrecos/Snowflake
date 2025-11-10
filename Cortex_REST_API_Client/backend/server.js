@@ -13,9 +13,17 @@ app.use(express.json());
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const ROOT_DIR = path.resolve(__dirname, '..');
+
+// Detect if running in container (server.js in /app) or local (server.js in backend/)
+// In container: __dirname = /app, public/ is at /app/public
+// In local: __dirname = .../backend, public/ is at ../public
+const isContainer = __dirname === '/app' || fs.existsSync(path.join(__dirname, 'public'));
+const ROOT_DIR = isContainer ? __dirname : path.resolve(__dirname, '..');
 const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
 const UI_CONFIG_PATH = path.join(PUBLIC_DIR, 'config.json');
+
+console.log(`[server] Running in ${isContainer ? 'container' : 'local'} mode`);
+console.log(`[server] PUBLIC_DIR: ${PUBLIC_DIR}`);
 
 app.use(express.static(PUBLIC_DIR));
 
@@ -24,9 +32,12 @@ const REQUIRED_ENV = [
   'AGENT_NAME',
   'AGENT_DB',
   'AGENT_SCHEMA',
-  'WAREHOUSE',
-  'AUTH_TOKEN'  // PAT (Personal Access Token) from Snowflake
+  'WAREHOUSE'
+  // AUTH_TOKEN is optional - only needed for local deployment
+  // SPCS automatically provides OAuth token at /snowflake/session/token
 ];
+
+const SPCS_TOKEN_PATH = '/snowflake/session/token';
 
 function loadUiConfig() {
   try {
@@ -38,10 +49,45 @@ function loadUiConfig() {
   }
 }
 
+function getAuthHeaders() {
+  // Priority 1: SPCS OAuth token (if running in SPCS)
+  if (fs.existsSync(SPCS_TOKEN_PATH)) {
+    try {
+      const oauthToken = fs.readFileSync(SPCS_TOKEN_PATH, 'utf-8').trim();
+      console.log('[auth] Using SPCS OAuth token from /snowflake/session/token');
+      return {
+        'Authorization': `Bearer ${oauthToken}`,
+        'X-Snowflake-Authorization-Token-Type': 'OAUTH',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      };
+    } catch (e) {
+      console.error('[auth] Failed to read SPCS OAuth token:', e.message);
+      throw new Error('Failed to read SPCS OAuth token');
+    }
+  }
+  
+  // Priority 2: PAT token from environment (local deployment)
+  if (process.env.AUTH_TOKEN) {
+    console.log('[auth] Using PAT token from AUTH_TOKEN environment variable');
+    return {
+      'Authorization': `Bearer ${process.env.AUTH_TOKEN}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    };
+  }
+  
+  throw new Error('No authentication method available. Local deployment requires AUTH_TOKEN in .env file.');
+}
+
 app.get('/api/health', (_req, res) => {
   const missing = REQUIRED_ENV.filter((k) => !process.env[k]);
+  const isSpcs = fs.existsSync(SPCS_TOKEN_PATH);
+  const hasPat = !!process.env.AUTH_TOKEN;
+  const hasAuth = isSpcs || hasPat;
+  
   res.json({ 
-    ok: missing.length === 0, 
+    ok: missing.length === 0 && hasAuth, 
     missing,
     config: {
       account: process.env.SNOWFLAKE_ACCOUNT_URL,
@@ -49,7 +95,8 @@ app.get('/api/health', (_req, res) => {
       database: process.env.AGENT_DB,
       schema: process.env.AGENT_SCHEMA,
       warehouse: process.env.WAREHOUSE,
-      has_token: !!process.env.AUTH_TOKEN
+      auth_method: isSpcs ? 'SPCS OAuth' : (hasPat ? 'PAT Token' : 'None'),
+      has_auth: hasAuth
     }
   });
 });
@@ -86,11 +133,7 @@ async function sfFetch(path, method = 'GET', body) {
   console.log(`[sfFetch] ${method} ${url}`);
   const resp = await fetch(url, {
     method,
-    headers: {
-      'Authorization': `Bearer ${process.env.AUTH_TOKEN}`,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json'
-    },
+    headers: getAuthHeaders(),
     body: body ? JSON.stringify(body) : undefined
   });
   const text = await resp.text();
@@ -163,10 +206,7 @@ app.post('/api/agent/:name/run', async (req, res) => {
 
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.AUTH_TOKEN}`,
-        'Content-Type': 'application/json'
-      },
+      headers: getAuthHeaders(),
       body: JSON.stringify(requestBody)
     });
 
@@ -262,9 +302,19 @@ app.post('/api/agent/:name/run', async (req, res) => {
 const PORT = process.env.PORT || 5173;
 app.listen(PORT, () => {
   const missing = REQUIRED_ENV.filter((k) => !process.env[k]);
+  const isSpcs = fs.existsSync(SPCS_TOKEN_PATH);
+  const hasPat = !!process.env.AUTH_TOKEN;
+  const authMethod = isSpcs ? 'SPCS OAuth' : (hasPat ? 'PAT Token' : 'NONE - ERROR');
+  
   // Make auth/config status obvious at startup
   console.log(`[server] listening on http://localhost:${PORT}`);
   console.log(`[server] config status: missing env = ${missing.length ? missing.join(', ') : 'none'}`);
+  console.log(`[server] authentication: ${authMethod}`);
+  
+  if (!isSpcs && !hasPat) {
+    console.error('[server] ERROR: No authentication method available!');
+    console.error('[server] Local deployment requires AUTH_TOKEN in backend/.env');
+  }
 });
 
 
