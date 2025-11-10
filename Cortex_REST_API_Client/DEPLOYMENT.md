@@ -33,12 +33,13 @@ SNOWFLAKE_ACCOUNT_URL=https://<your_account>.snowflakecomputing.com
 AGENT_NAME=YOUR_AGENT
 AGENT_DB=YOUR_DATABASE
 AGENT_SCHEMA=YOUR_SCHEMA
-WAREHOUSE=YOUR_WAREHOUSE
+WAREHOUSE=YOUR_WAREHOUSE  # Optional - for reference only
 AUTH_TOKEN=<your_PAT_token>
 ```
 
 **IMPORTANT:**
 - Replace `<your_account>` with your Snowflake account identifier
+- **Warehouse Configuration**: The agent requires a warehouse to be configured in the Snowflake Agent UI (in your agent's settings). The `WAREHOUSE` env var above is optional and used for reference/debugging only.
 - `AGENT_NAME` must match your Cortex agent exactly (case-sensitive)
 - Replace `YOUR_DATABASE`, `YOUR_SCHEMA`, `YOUR_WAREHOUSE` with actual values
 - The `AUTH_TOKEN` is a **Personal Access Token (PAT)** from Snowflake (see section 6 for creation steps)

@@ -102,13 +102,27 @@ SNOWFLAKE_ACCOUNT_URL="https://<org>-<account>.snowflakecomputing.com"
 AGENT_NAME="<your-agent-name>"
 AGENT_DB="<database-containing-agent>"
 AGENT_SCHEMA="<schema-containing-agent>"
-WAREHOUSE="<warehouse-name>"  # Required for agent to execute queries
+WAREHOUSE="<warehouse-name>"  # Optional - for reference only (see note below)
 # NOTE: No AUTH_TOKEN needed for SPCS!
 ```
 
-**Important:** The `WAREHOUSE` is required for the agent to execute SQL queries. Make sure:
+**⚠️ Important Warehouse Configuration:**
+
+The agent requires a warehouse to execute SQL queries, but it must be configured in **two places**:
+
+1. **Snowflake Agent UI** (Required):
+   - Navigate to your agent in Snowflake UI
+   - Set the warehouse in the agent's configuration/settings
+   - This is where the agent actually gets its warehouse from
+
+2. **Environment Variable** (Optional):
+   - The `WAREHOUSE` env var is for reference/debugging only
+   - It appears in the debug panel but is not passed to the agent API
+   - You can omit this if you prefer
+
+**Also ensure:**
 - The warehouse exists and is accessible
-- Your service's OAuth token has `USAGE` permission on the warehouse
+- Your service's OAuth role has `USAGE` permission on the warehouse
 - The warehouse has appropriate size for your agent's query workload
 
 ---
@@ -568,48 +582,35 @@ DROP SERVICE cortex_agent_service;
 
 ### Agent Says "Requires Default Warehouse" or Cannot Execute Queries
 
-**Symptom**: Agent responds with "requires a default warehouse to be set" or "configuration issue"
+**Symptom**: Agent responds with "requires a default warehouse to be set" or "Unable to run the command. You must specify the warehouse..."
 
-**Cause**: The `WAREHOUSE` parameter is either:
-1. Not configured in secrets
-2. Not bound to the service's environment variables
-3. The service doesn't have permission to use the warehouse
+**Root Cause**: The warehouse must be configured in the **Snowflake Cortex Agent UI**, not via environment variables or API parameters.
 
-**Solutions**:
+**Solution**:
 
-1. **Verify warehouse secret exists**:
-```sql
-SHOW SECRETS LIKE '%warehouse%';
-DESC SECRET cortex_agent_warehouse;
-```
+1. **Configure warehouse in Snowflake UI**:
+   - Navigate to your agent's database and schema (e.g., `SNOWFLAKE_INTELLIGENCE.AGENTS`)
+   - Click on your agent (e.g., `HACKTHON_SP_TEST_V1`)
+   - Find the **Settings** or **Configuration** section
+   - Set the **Warehouse** field to your warehouse name (e.g., `DEMO_WH`)
+   - Save the configuration
 
-2. **Recreate warehouse secret** (if missing or incorrect):
-```sql
-CREATE OR REPLACE SECRET cortex_agent_warehouse
-  TYPE = GENERIC_STRING
-  SECRET_STRING = 'YOUR_ACTUAL_WAREHOUSE_NAME';
-```
+2. **Ensure role has warehouse access**:
+   ```sql
+   -- Grant warehouse access to your SPCS role
+   USE ROLE ACCOUNTADMIN;
+   GRANT USAGE ON WAREHOUSE DEMO_WH TO ROLE <YOUR_ROLE>;
+   
+   -- Example (if using SYSADMIN):
+   GRANT USAGE ON WAREHOUSE DEMO_WH TO ROLE SYSADMIN;
+   ```
 
-3. **Check service logs to see if warehouse is being passed**:
-```sql
-SELECT SYSTEM$GET_SERVICE_LOGS('cortex_agent_service', 0, 'cortex-agent-app', 50);
--- Look for: "[run] Using warehouse: YOUR_WAREHOUSE_NAME"
-```
+3. **Verify with debug panel**:
+   - Click the 🔍 button in the app's top-right corner
+   - Check the **Role Context** section to see current role and warehouse
+   - Submit a test question to verify the agent can execute queries
 
-4. **Grant warehouse permissions** (if service can't access warehouse):
-```sql
--- Grant warehouse usage to compute pool role
-GRANT USAGE ON WAREHOUSE <your_warehouse> TO ROLE <compute_pool_role>;
-
--- Example:
-GRANT USAGE ON WAREHOUSE COMPUTE_WH TO ROLE SYSADMIN;
-```
-
-5. **Recreate service** with updated warehouse secret:
-```sql
-DROP SERVICE cortex_agent_service;
--- (Re-run CREATE SERVICE from deploy.sql)
-```
+📖 **See [TROUBLESHOOTING_WAREHOUSE.md](./TROUBLESHOOTING_WAREHOUSE.md) for detailed steps and common issues.**
 
 ### Agent Verification Fails or "401 Unauthorized"
 

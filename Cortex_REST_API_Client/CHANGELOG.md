@@ -1,8 +1,15 @@
 # Changelog — Snowflake Cortex Agent REST API Client
 
-## v4.1 - SPCS OAuth Authentication (November 10, 2025)
+## v4.1 - SPCS OAuth Authentication and Warehouse Configuration (November 10, 2025)
 
-### Major Improvement
+### Major Improvements
+
+**Warehouse Configuration Resolution:**
+- **Identified correct warehouse configuration method**: Must be set in Snowflake Agent UI, not via REST API
+- Removed unnecessary `warehouse` parameter from agent:run API requests (was not being used by agent)
+- Simplified code and documentation to reflect correct configuration approach
+- Updated all docs with clear instructions: configure warehouse in Snowflake Cortex Agent settings
+- `WAREHOUSE` environment variable is now optional (for reference/debugging only)
 
 **Automatic OAuth Authentication for SPCS:**
 - SPCS deployment now uses automatic OAuth token from `/snowflake/session/token`
@@ -21,15 +28,16 @@
   - **Local mode**: Uses `SNOWFLAKE_ACCOUNT_URL` from `.env`
 - SPCS mode: Reads OAuth token from `/snowflake/session/token` and adds `X-Snowflake-Authorization-Token-Type: OAUTH` header
 - Local mode: Uses `AUTH_TOKEN` from environment (backward compatible)
-- **Added `warehouse` parameter to agent:run requests** (fixes "requires default warehouse" error)
+- **Added SQL API helper** (`runSqlStatement`) for executing Snowflake SQL commands via REST API
+- **Enhanced debug endpoint** to query `CURRENT_ROLE()` and `CURRENT_WAREHOUSE()` for troubleshooting
+- Removed `warehouse` parameter from agent:run requests (not used by agent API)
 - **Enhanced logging and debugging:**
-  - Health endpoint now logs all environment variables with clear status
-  - Run endpoint logs full request body before sending
-  - Warnings when WAREHOUSE is not set
+  - Health endpoint logs all environment variables with clear status
   - Shows SNOWFLAKE_HOST value when using SPCS OAuth
 - Updated health endpoint to show authentication method and all config values
 - Enhanced startup logging to display authentication mode and routing URL
 - Made `AUTH_TOKEN` optional in `REQUIRED_ENV` (only needed locally)
+- Simplified warehouse handling: env var is optional, used for reference only
 
 **`deploy.sql`:**
 - Removed `cortex_agent_auth_token` secret (not needed for SPCS)
@@ -45,7 +53,8 @@
 - Removed PAT token from prerequisites
 - Added "Authentication in SPCS" section explaining OAuth and `SNOWFLAKE_HOST`
 - Documented how internal routing works with SPCS
-- Updated troubleshooting to remove PAT-related issues
+- **Updated warehouse configuration section**: clearly states warehouse must be set in Snowflake Agent UI
+- Simplified troubleshooting for warehouse issues
 - Added OAuth and SNOWFLAKE_HOST verification steps
 - Clarified that only 5 secrets are needed
 - Explained why OAuth token requires `SNOWFLAKE_HOST` routing
@@ -58,19 +67,24 @@
 - ✅ **Backward compatible**: Local deployment unchanged
 - ✅ **Production ready**: Uses Snowflake's recommended auth method for SPCS
 
+**`public/app.js`:**
+- Updated debug panel to show warehouse env var as optional (not an error if missing)
+- Added "Role Context" section displaying SQL-based diagnostics
+
 **UI Enhancements:**
 - **Debug Panel**: Added in-app debug panel for troubleshooting SPCS deployments
   - Discreet 🔍 button in top-right status bar
   - Shows deployment environment (SPCS vs Local)
   - Displays authentication method and token status
   - Shows routing configuration (SNOWFLAKE_HOST vs Account URL)
-  - **Highlights warehouse configuration** (key issue for agent queries)
+  - Shows warehouse env var (optional, for reference only)
+  - **Role Context section**: Runs `SELECT CURRENT_ROLE()` and `SELECT CURRENT_WAREHOUSE()` via Snowflake SQL API to surface the active service role and warehouse
   - Color-coded status indicators (green = ok, red = error, orange = warning)
   - Real-time refresh of diagnostic data
   - Accessible without needing SPCS log access
 
-**New Files:**
-- `DEBUG_WAREHOUSE_ISSUE.md`: Step-by-step diagnostic guide for troubleshooting warehouse configuration issues
+**Updated Files:**
+- `docs/TROUBLESHOOTING_WAREHOUSE.md`: Completely rewritten to reflect correct warehouse configuration method (Snowflake Agent UI)
 
 ### References
 

@@ -1145,7 +1145,6 @@ function renderDebugInfo(data) {
   </div>`;
   
   // Configuration
-  const warehouseOk = data.configuration?.hasWarehouse;
   html += `<div class="debug-section">
     <div class="debug-section-title">Configuration</div>
     <div class="debug-row">
@@ -1161,12 +1160,36 @@ function renderDebugInfo(data) {
       <span class="debug-value">${data.configuration?.agentSchema || 'NOT SET'}</span>
     </div>
     <div class="debug-row">
-      <span class="debug-key">Warehouse:</span>
-      <span class="debug-value ${warehouseOk ? 'status-ok' : 'status-error'}">
-        ${data.configuration?.warehouse || 'NOT SET - REQUIRED!'}
+      <span class="debug-key">Warehouse (Env):</span>
+      <span class="debug-value">
+        ${data.configuration?.warehouse || 'Not set (configure in Agent UI)'}
       </span>
     </div>
   </div>`;
+  
+  // Role Context via SQL API
+  if (data.sql) {
+    const currentRole = data.sql.currentRole || 'Unknown';
+    const warehouseLabel = data.sql.currentWarehouse || 'None (not set)';
+    const hasCurrentWarehouse = !!data.sql.currentWarehouse;
+    html += `<div class="debug-section">
+      <div class="debug-section-title">Role Context</div>
+      <div class="debug-row">
+        <span class="debug-key">Current Role:</span>
+        <span class="debug-value">${currentRole}</span>
+      </div>
+      <div class="debug-row">
+        <span class="debug-key">Current Warehouse:</span>
+        <span class="debug-value ${hasCurrentWarehouse ? 'status-ok' : 'status-warning'}">
+          ${warehouseLabel}
+        </span>
+      </div>
+      ${data.sql.error ? `<div class="debug-row">
+        <span class="debug-key">SQL Check:</span>
+        <span class="debug-value status-warning">${data.sql.error}</span>
+      </div>` : ''}
+    </div>`;
+  }
   
   // Timestamp
   html += `<div class="debug-timestamp">

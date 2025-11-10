@@ -92,6 +92,75 @@ function getBaseUrl() {
   return process.env.SNOWFLAKE_ACCOUNT_URL;
 }
 
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function runSqlStatement(statement, options = {}) {
+  const baseUrl = getBaseUrl();
+  if (!baseUrl) {
+    throw new Error('Snowflake base URL is not configured');
+  }
+
+  const headers = getAuthHeaders();
+  const payload = {
+    statement,
+    timeout: options.timeout || 30,
+    resultSetMetaData: { format: 'jsonv2' },
+    ...options.payloadOverrides
+  };
+
+  const postResp = await fetch(`${baseUrl}/api/v2/statements`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload)
+  });
+
+  const postText = await postResp.text();
+  if (!postResp.ok) {
+    throw new Error(`Snowflake SQL API ${postResp.status}: ${postText}`);
+  }
+
+  let result;
+  try {
+    result = JSON.parse(postText);
+  } catch (e) {
+    throw new Error(`Failed to parse Snowflake SQL API response: ${e.message}`);
+  }
+
+  let attempts = 0;
+  const maxAttempts = options.maxAttempts || 10;
+  const pollInterval = options.pollInterval || 500;
+
+  while (
+    result.status &&
+    result.status !== 'SUCCESS' &&
+    result.status !== 'FAILED' &&
+    attempts < maxAttempts
+  ) {
+    await delay(pollInterval);
+    const statusPath = result.statementStatusUrl || `/api/v2/statements/${result.statementHandle}`;
+    const statusResp = await fetch(`${baseUrl}${statusPath}`, {
+      method: 'GET',
+      headers
+    });
+    const statusText = await statusResp.text();
+    if (!statusResp.ok) {
+      throw new Error(`Snowflake SQL API ${statusResp.status}: ${statusText}`);
+    }
+    try {
+      result = JSON.parse(statusText);
+    } catch (e) {
+      throw new Error(`Failed to parse Snowflake SQL API status response: ${e.message}`);
+    }
+    attempts += 1;
+  }
+
+  if (result.status && result.status !== 'SUCCESS') {
+    throw new Error(result.errorMessage || result.responseError || `Snowflake SQL statement status: ${result.status}`);
+  }
+
+  return result;
+}
+
 app.get('/api/health', (_req, res) => {
   const missing = REQUIRED_ENV.filter((k) => !process.env[k]);
   const isSpcs = fs.existsSync(SPCS_TOKEN_PATH);
@@ -105,7 +174,7 @@ app.get('/api/health', (_req, res) => {
   console.log(`  AGENT_NAME: ${process.env.AGENT_NAME || 'MISSING'}`);
   console.log(`  AGENT_DB: ${process.env.AGENT_DB || 'MISSING'}`);
   console.log(`  AGENT_SCHEMA: ${process.env.AGENT_SCHEMA || 'MISSING'}`);
-  console.log(`  WAREHOUSE: ${process.env.WAREHOUSE || 'MISSING - REQUIRED FOR QUERIES!'}`);
+  console.log(`  WAREHOUSE: ${process.env.WAREHOUSE || 'not set (configure in Agent UI)'}`);
   
   res.json({ 
     ok: missing.length === 0 && hasAuth, 
@@ -115,7 +184,7 @@ app.get('/api/health', (_req, res) => {
       agentName: process.env.AGENT_NAME,
       database: process.env.AGENT_DB,
       schema: process.env.AGENT_SCHEMA,
-      warehouse: process.env.WAREHOUSE,
+      warehouse: process.env.WAREHOUSE || 'Set in Agent UI',
       snowflake_host: process.env.SNOWFLAKE_HOST || 'not available',
       auth_method: isSpcs ? 'SPCS OAuth' : (hasPat ? 'PAT Token' : 'None'),
       has_auth: hasAuth
@@ -138,11 +207,46 @@ app.get('/api/app-config', (_req, res) => {
 });
 
 // Debug endpoint - returns diagnostic information for troubleshooting
-app.get('/api/debug', (_req, res) => {
+app.get('/api/debug', async (_req, res) => {
   const isSpcs = fs.existsSync(SPCS_TOKEN_PATH);
   const hasPat = !!process.env.AUTH_TOKEN;
   const hasSpcsHost = !!process.env.SNOWFLAKE_HOST;
   const hasWarehouse = !!process.env.WAREHOUSE;
+  const sqlDiagnostics = {
+    currentRole: null,
+    currentWarehouse: null,
+    error: null
+  };
+
+  try {
+    const roleResult = await runSqlStatement('SELECT CURRENT_ROLE() AS CURRENT_ROLE');
+    const rows = Array.isArray(roleResult.data) ? roleResult.data : [];
+    const firstRow = rows[0];
+    if (firstRow && typeof firstRow === 'object') {
+      const key = Object.keys(firstRow).find((k) => k.toLowerCase() === 'current_role');
+      sqlDiagnostics.currentRole = key ? firstRow[key] : Object.values(firstRow)[0];
+    } else if (Array.isArray(firstRow)) {
+      sqlDiagnostics.currentRole = firstRow[0];
+    }
+  } catch (err) {
+    sqlDiagnostics.error = `Unable to query CURRENT_ROLE: ${err.message}`;
+  }
+
+  if (!sqlDiagnostics.error) {
+    try {
+      const warehouseResult = await runSqlStatement('SELECT CURRENT_WAREHOUSE() AS CURRENT_WAREHOUSE');
+      const rows = Array.isArray(warehouseResult.data) ? warehouseResult.data : [];
+      const firstRow = rows[0];
+      if (firstRow && typeof firstRow === 'object') {
+        const key = Object.keys(firstRow).find((k) => k.toLowerCase() === 'current_warehouse');
+        sqlDiagnostics.currentWarehouse = key ? firstRow[key] : Object.values(firstRow)[0];
+      } else if (Array.isArray(firstRow)) {
+        sqlDiagnostics.currentWarehouse = firstRow[0];
+      }
+    } catch (err) {
+      sqlDiagnostics.currentWarehouse = null;
+    }
+  }
   
   res.json({
     timestamp: new Date().toISOString(),
@@ -168,14 +272,15 @@ app.get('/api/debug', (_req, res) => {
       agentName: process.env.AGENT_NAME || 'NOT SET',
       agentDatabase: process.env.AGENT_DB || 'NOT SET',
       agentSchema: process.env.AGENT_SCHEMA || 'NOT SET',
-      warehouse: process.env.WAREHOUSE || 'NOT SET - REQUIRED!',
+      warehouse: process.env.WAREHOUSE || 'Not set (configure in Agent UI)',
       hasWarehouse: hasWarehouse
     },
+    sql: sqlDiagnostics,
     status: {
       allEnvVarsSet: !!(process.env.SNOWFLAKE_ACCOUNT_URL && process.env.AGENT_NAME && 
-                         process.env.AGENT_DB && process.env.AGENT_SCHEMA && hasWarehouse),
+                         process.env.AGENT_DB && process.env.AGENT_SCHEMA),
       authConfigured: isSpcs || hasPat,
-      readyToRun: !!(process.env.AGENT_NAME && hasWarehouse && (isSpcs || hasPat))
+      readyToRun: !!(process.env.AGENT_NAME && (isSpcs || hasPat))
     }
   });
 });
@@ -262,14 +367,6 @@ app.post('/api/agent/:name/run', async (req, res) => {
 
     // Build request body
     const requestBody = { messages };
-
-    // Add warehouse for query execution
-    if (process.env.WAREHOUSE) {
-      requestBody.warehouse = process.env.WAREHOUSE;
-      console.log(`[run] Using warehouse: ${process.env.WAREHOUSE}`);
-    } else {
-      console.warn('[run] WARNING: WAREHOUSE environment variable not set!');
-    }
 
     // Add thread_id and parent_message_id ONLY if continuing an existing conversation
     // For new conversations: omit these fields entirely (Snowflake creates new thread)
