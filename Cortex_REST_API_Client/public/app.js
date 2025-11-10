@@ -557,10 +557,16 @@ function renderMessageContent(events, targetEl) {
       flushTextBuffer();
       const chartDiv = document.createElement('div');
       chartDiv.className = 'chart-container';
-      chartDiv.id = `chart-${Date.now()}-${idx}`;
+      const chartId = `chart-${Date.now()}-${idx}`;
+      chartDiv.id = chartId;
       targetEl.appendChild(chartDiv);
       
       try {
+        // Check if vegaEmbed is available
+        if (typeof vegaEmbed === 'undefined') {
+          throw new Error('Vega-Embed library not loaded');
+        }
+        
         const spec = JSON.parse(item.chart.chart_spec);
         
         // Make chart larger but constrained
@@ -586,7 +592,7 @@ function renderMessageContent(events, targetEl) {
           cornerRadiusEnd: 4  // Rounded bar ends
         };
         
-        vegaEmbed(`#chart-${Date.now()}-${idx}`, spec, { 
+        vegaEmbed(`#${chartId}`, spec, { 
           actions: {
             export: { svg: true, png: true },
             source: false,
@@ -594,9 +600,13 @@ function renderMessageContent(events, targetEl) {
             editor: false
           },
           renderer: 'svg'
+        }).catch(err => {
+          console.error('Vega-Embed render error:', err);
+          chartDiv.innerHTML = `<p style="color: #a00;">Chart render error: ${err.message}</p>`;
         });
       } catch (e) {
-        chartDiv.innerHTML = '<p style="color: #a00;">Chart render error</p>';
+        console.error('Chart parsing error:', e);
+        chartDiv.innerHTML = `<p style="color: #a00;">Chart render error: ${e.message}</p>`;
       }
     }
   });

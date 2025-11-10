@@ -47,10 +47,18 @@ SHOW IMAGE REPOSITORIES LIKE 'cortex_agent_repo';
 CREATE OR REPLACE NETWORK RULE cortex_agent_outbound
   TYPE = 'HOST_PORT'
   MODE = 'EGRESS'
-  VALUE_LIST = ('<your-account>.snowflakecomputing.com:443');
+  VALUE_LIST = (
+    '<your-account>.snowflakecomputing.com:443',
+    'cdn.jsdelivr.net:443',           -- Vega/Vega-Lite chart libraries
+    'cdnjs.cloudflare.com:443'        -- Highlight.js code highlighting
+  );
 
 -- Example:
--- VALUE_LIST = ('xy12345.us-east-1.snowflakecomputing.com:443');
+-- VALUE_LIST = (
+--   'xy12345.us-east-1.snowflakecomputing.com:443',
+--   'cdn.jsdelivr.net:443',
+--   'cdnjs.cloudflare.com:443'
+-- );
 
 -- =============================================================================
 -- STEP 3: Create External Access Integration

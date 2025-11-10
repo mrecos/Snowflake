@@ -1,5 +1,80 @@
 # Changelog — Snowflake Cortex Agent REST API Client
 
+## v1.1.8 - Chart Rendering Fixed for SPCS (November 10, 2025)
+
+### Bug Fixes
+
+**Chart Rendering in SPCS:**
+- **Fixed critical bug**: Chart ID mismatch causing "Chart render error" in SPCS deployment
+  - Issue: `Date.now()` was called twice, generating different IDs for div creation and vegaEmbed call
+  - Solution: Store chart ID in variable and reuse for both operations
+- **Added CDN access to network rules**: Vega-Lite and Highlight.js libraries now accessible from SPCS
+  - Added `cdn.jsdelivr.net:443` to network rules (Vega/Vega-Lite chart rendering)
+  - Added `cdnjs.cloudflare.com:443` to network rules (Highlight.js syntax highlighting)
+- **Enhanced error handling**: Better error messages showing actual error details instead of generic "Chart render error"
+- **Added library load detection**: Console logging to verify Vega-Embed loaded successfully
+- **Added crossorigin attributes**: All CDN script tags now have `crossorigin="anonymous"` for better security
+
+### Technical Changes
+
+**`public/app.js`:**
+- Fixed chart ID generation: use single `Date.now()` call stored in `chartId` variable
+- Added check for `vegaEmbed` availability before attempting to render
+- Enhanced error handling with `.catch()` on `vegaEmbed()` promise
+- Added detailed error logging to browser console
+
+**`public/index.html`:**
+- Added `crossorigin="anonymous"` to all CDN script and link tags
+- Added DOMContentLoaded listener to verify Vega-Embed library loads successfully
+- Added console logging for library load status
+
+**`deploy.sql`:**
+- Updated `cortex_agent_outbound` network rule to include CDN domains:
+  - `cdn.jsdelivr.net:443` for Vega/Vega-Lite
+  - `cdnjs.cloudflare.com:443` for Highlight.js
+
+**`docs/SPCS_DEPLOYMENT.md`:**
+- Added "Charts Not Rendering" troubleshooting section with step-by-step fix
+- Updated architecture diagram to show CDN access in External Access Integration
+- Updated security section to document CDN access control
+- Added browser console verification steps
+
+### Verification
+
+- Tested in SPCS deployment (v1.1.8)
+- Charts now render correctly with Vega-Lite visualizations
+- Syntax highlighting works for SQL and Python code blocks
+- Browser console shows "Vega-Embed loaded successfully"
+
+### Migration Required
+
+If you already deployed to SPCS, you must update your network rule:
+
+```sql
+-- Update network rule to allow CDN access
+DROP NETWORK RULE IF EXISTS cortex_agent_outbound;
+CREATE NETWORK RULE cortex_agent_outbound
+  TYPE = 'HOST_PORT'
+  MODE = 'EGRESS'
+  VALUE_LIST = (
+    '<your-account>.snowflakecomputing.com:443',
+    'cdn.jsdelivr.net:443',
+    'cdnjs.cloudflare.com:443'
+  );
+
+-- Recreate external access integration
+DROP EXTERNAL ACCESS INTEGRATION IF EXISTS cortex_agent_external_access;
+CREATE EXTERNAL ACCESS INTEGRATION cortex_agent_external_access
+  ALLOWED_NETWORK_RULES = (cortex_agent_outbound)
+  ENABLED = TRUE;
+
+-- Restart service
+ALTER SERVICE cortex_agent_service SUSPEND;
+ALTER SERVICE cortex_agent_service RESUME;
+```
+
+---
+
 ## v4.1 - SPCS OAuth Authentication and Warehouse Configuration (November 10, 2025)
 
 ### Major Improvements

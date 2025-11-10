@@ -33,8 +33,8 @@ Snowpark Container Services (SPCS) allows you to run containerized applications 
 - **Container**: Node.js application serving the web UI and API proxy
 - **Compute Pool**: CPU_X64_S (2 CPU, 4GB RAM) with auto-scaling (1-3 nodes)
 - **Public Endpoint**: HTTPS URL accessible from anywhere
-- **External Access**: Outbound HTTPS to Snowflake Cortex Agent REST API
-- **Secrets**: Secure storage for PAT token and configuration
+- **External Access**: Outbound HTTPS to Snowflake Cortex Agent REST API and CDN resources (for chart rendering and syntax highlighting)
+- **Secrets**: Secure storage for configuration values
 
 ---
 
@@ -161,6 +161,8 @@ The agent requires a warehouse to execute SQL queries, but it must be configured
 │  │         External Access Integration             │    │
 │  │  Allows outbound HTTPS to:                      │    │
 │  │  - <account>.snowflakecomputing.com:443         │    │
+│  │  - cdn.jsdelivr.net:443 (Vega charts)           │    │
+│  │  - cdnjs.cloudflare.com:443 (Highlight.js)      │    │
 │  └────────────────────────────────────────────────┘    │
 │                                                          │
 │  ┌────────────────────────────────────────────────┐    │
@@ -653,6 +655,50 @@ DROP EXTERNAL ACCESS INTEGRATION cortex_agent_external_access;
    
    **Why this matters:** The OAuth token only works when routing through `SNOWFLAKE_HOST` (internal network), not through the public `SNOWFLAKE_ACCOUNT_URL`
 
+### Charts Not Rendering ("Chart render error")
+
+**Symptom**: Charts show "Chart render error" message instead of visualization
+
+**Root Cause**: The service cannot access CDN resources (Vega-Lite libraries) due to network restrictions.
+
+**Solution**:
+
+1. **Update network rule to allow CDN access**:
+```sql
+-- Drop and recreate network rule with CDN domains
+DROP NETWORK RULE IF EXISTS cortex_agent_outbound;
+
+CREATE NETWORK RULE cortex_agent_outbound
+  TYPE = 'HOST_PORT'
+  MODE = 'EGRESS'
+  VALUE_LIST = (
+    '<your-account>.snowflakecomputing.com:443',
+    'cdn.jsdelivr.net:443',           -- Vega/Vega-Lite chart libraries
+    'cdnjs.cloudflare.com:443'        -- Highlight.js code highlighting
+  );
+```
+
+2. **Recreate external access integration**:
+```sql
+DROP EXTERNAL ACCESS INTEGRATION IF EXISTS cortex_agent_external_access;
+
+CREATE EXTERNAL ACCESS INTEGRATION cortex_agent_external_access
+  ALLOWED_NETWORK_RULES = (cortex_agent_outbound)
+  ENABLED = TRUE;
+```
+
+3. **Restart the service**:
+```sql
+ALTER SERVICE cortex_agent_service SUSPEND;
+ALTER SERVICE cortex_agent_service RESUME;
+```
+
+4. **Verify in browser console**:
+   - Open the app in your browser
+   - Open Developer Tools (F12)
+   - Check the Console tab for: `"Vega-Embed loaded successfully"`
+   - If you see `"Vega-Embed library failed to load from CDN"`, the network rule is not working
+
 ### Cannot Access Public Endpoint
 
 **Symptom**: URL times out or shows "connection refused"
@@ -708,7 +754,7 @@ ALTER COMPUTE POOL cortex_agent_pool SUSPEND;
 
 ### Network Security
 
-- **External access is limited**: Only HTTPS to Snowflake account URL (no internet access)
+- **External access is controlled**: HTTPS to Snowflake account URL and specific CDN domains only (jsdelivr.net, cloudflare.com)
 - **Public endpoint requires HTTPS**: All traffic encrypted in transit
 - **Consider IP whitelisting**: Use Snowflake network policies to restrict access
 
