@@ -77,13 +77,21 @@ Snowpark Container Services (SPCS) allows you to run containerized applications 
 
 When running in SPCS, the application automatically:
 - Uses OAuth token from `/snowflake/session/token` (provided by SPCS)
+- Uses `SNOWFLAKE_HOST` environment variable for internal routing (provided by SPCS)
 - Routes through Snowflake's internal network (bypasses IP restrictions)
 - Adds `X-Snowflake-Authorization-Token-Type: OAUTH` header
+
+**How It Works:**
+1. SPCS automatically injects `SNOWFLAKE_HOST` and creates `/snowflake/session/token`
+2. Application detects SPCS environment and switches to OAuth mode
+3. All API calls route through `https://${SNOWFLAKE_HOST}` (internal routing)
+4. OAuth token is authorized for internal Snowflake APIs (no IP checks)
 
 This means:
 - ✅ **No PAT token needed** (unlike local deployment)
 - ✅ **Works with strict network policies** (bypasses IP restrictions)
 - ✅ **More secure** (uses service identity, not personal credentials)
+- ✅ **Automatic configuration** (SPCS provides everything needed)
 
 ### Configuration Values to Gather
 
@@ -94,9 +102,14 @@ SNOWFLAKE_ACCOUNT_URL="https://<org>-<account>.snowflakecomputing.com"
 AGENT_NAME="<your-agent-name>"
 AGENT_DB="<database-containing-agent>"
 AGENT_SCHEMA="<schema-containing-agent>"
-WAREHOUSE="<warehouse-name>"
+WAREHOUSE="<warehouse-name>"  # Required for agent to execute queries
 # NOTE: No AUTH_TOKEN needed for SPCS!
 ```
+
+**Important:** The `WAREHOUSE` is required for the agent to execute SQL queries. Make sure:
+- The warehouse exists and is accessible
+- Your service's OAuth token has `USAGE` permission on the warehouse
+- The warehouse has appropriate size for your agent's query workload
 
 ---
 
@@ -553,6 +566,51 @@ DROP SERVICE cortex_agent_service;
 -- (Re-run CREATE SERVICE from deploy.sql)
 ```
 
+### Agent Says "Requires Default Warehouse" or Cannot Execute Queries
+
+**Symptom**: Agent responds with "requires a default warehouse to be set" or "configuration issue"
+
+**Cause**: The `WAREHOUSE` parameter is either:
+1. Not configured in secrets
+2. Not bound to the service's environment variables
+3. The service doesn't have permission to use the warehouse
+
+**Solutions**:
+
+1. **Verify warehouse secret exists**:
+```sql
+SHOW SECRETS LIKE '%warehouse%';
+DESC SECRET cortex_agent_warehouse;
+```
+
+2. **Recreate warehouse secret** (if missing or incorrect):
+```sql
+CREATE OR REPLACE SECRET cortex_agent_warehouse
+  TYPE = GENERIC_STRING
+  SECRET_STRING = 'YOUR_ACTUAL_WAREHOUSE_NAME';
+```
+
+3. **Check service logs to see if warehouse is being passed**:
+```sql
+SELECT SYSTEM$GET_SERVICE_LOGS('cortex_agent_service', 0, 'cortex-agent-app', 50);
+-- Look for: "[run] Using warehouse: YOUR_WAREHOUSE_NAME"
+```
+
+4. **Grant warehouse permissions** (if service can't access warehouse):
+```sql
+-- Grant warehouse usage to compute pool role
+GRANT USAGE ON WAREHOUSE <your_warehouse> TO ROLE <compute_pool_role>;
+
+-- Example:
+GRANT USAGE ON WAREHOUSE COMPUTE_WH TO ROLE SYSADMIN;
+```
+
+5. **Recreate service** with updated warehouse secret:
+```sql
+DROP SERVICE cortex_agent_service;
+-- (Re-run CREATE SERVICE from deploy.sql)
+```
+
 ### Agent Verification Fails or "401 Unauthorized"
 
 **Symptom**: "Verify Agent" button shows error or 401 Unauthorized
@@ -574,6 +632,7 @@ SHOW CORTEX AGENTS IN SCHEMA <your_db>.<your_schema>;
 ```sql
 SELECT SYSTEM$GET_SERVICE_LOGS('cortex_agent_service', 0, 'cortex-agent-app', 100);
 -- Look for: "[auth] Using SPCS OAuth token from /snowflake/session/token"
+-- AND: "[auth] Using SNOWFLAKE_HOST for internal routing: ..."
 ```
 
 3. **Verify external access integration**:
@@ -586,9 +645,12 @@ DROP EXTERNAL ACCESS INTEGRATION cortex_agent_external_access;
 -- (Re-run steps 2-3 from deploy.sql)
 ```
 
-4. **If still getting 401 errors**: This usually means the OAuth token is not being read correctly. Check that:
-   - Image was built with the latest `server.js` (includes OAuth support)
-   - Service has access to `/snowflake/session/token` (automatically provided by SPCS)
+4. **If still getting 401 "unauthorized to use OAuth token" errors**: This usually means `SNOWFLAKE_HOST` is not being used. Check that:
+   - Image was built with the latest `server.js` (v4.1+ with `getBaseUrl()` function)
+   - Service logs show both OAuth token AND SNOWFLAKE_HOST being used
+   - SPCS is providing `SNOWFLAKE_HOST` environment variable (automatic in SPCS)
+   
+   **Why this matters:** The OAuth token only works when routing through `SNOWFLAKE_HOST` (internal network), not through the public `SNOWFLAKE_ACCOUNT_URL`
 
 ### Cannot Access Public Endpoint
 

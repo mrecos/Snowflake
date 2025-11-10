@@ -80,11 +80,32 @@ function getAuthHeaders() {
   throw new Error('No authentication method available. Local deployment requires AUTH_TOKEN in .env file.');
 }
 
+function getBaseUrl() {
+  // SPCS provides SNOWFLAKE_HOST for internal routing
+  // This is required for OAuth token to work (different from external URL)
+  if (fs.existsSync(SPCS_TOKEN_PATH) && process.env.SNOWFLAKE_HOST) {
+    console.log(`[auth] Using SNOWFLAKE_HOST for internal routing: ${process.env.SNOWFLAKE_HOST}`);
+    return `https://${process.env.SNOWFLAKE_HOST}`;
+  }
+  
+  // Local deployment uses the standard account URL
+  return process.env.SNOWFLAKE_ACCOUNT_URL;
+}
+
 app.get('/api/health', (_req, res) => {
   const missing = REQUIRED_ENV.filter((k) => !process.env[k]);
   const isSpcs = fs.existsSync(SPCS_TOKEN_PATH);
   const hasPat = !!process.env.AUTH_TOKEN;
   const hasAuth = isSpcs || hasPat;
+  
+  // Log environment variables for debugging
+  console.log('[health] Environment check:');
+  console.log(`  SNOWFLAKE_ACCOUNT_URL: ${process.env.SNOWFLAKE_ACCOUNT_URL ? 'set' : 'MISSING'}`);
+  console.log(`  SNOWFLAKE_HOST: ${process.env.SNOWFLAKE_HOST ? process.env.SNOWFLAKE_HOST : 'not set (ok for local)'}`);
+  console.log(`  AGENT_NAME: ${process.env.AGENT_NAME || 'MISSING'}`);
+  console.log(`  AGENT_DB: ${process.env.AGENT_DB || 'MISSING'}`);
+  console.log(`  AGENT_SCHEMA: ${process.env.AGENT_SCHEMA || 'MISSING'}`);
+  console.log(`  WAREHOUSE: ${process.env.WAREHOUSE || 'MISSING - REQUIRED FOR QUERIES!'}`);
   
   res.json({ 
     ok: missing.length === 0 && hasAuth, 
@@ -95,6 +116,7 @@ app.get('/api/health', (_req, res) => {
       database: process.env.AGENT_DB,
       schema: process.env.AGENT_SCHEMA,
       warehouse: process.env.WAREHOUSE,
+      snowflake_host: process.env.SNOWFLAKE_HOST || 'not available',
       auth_method: isSpcs ? 'SPCS OAuth' : (hasPat ? 'PAT Token' : 'None'),
       has_auth: hasAuth
     }
@@ -115,6 +137,49 @@ app.get('/api/app-config', (_req, res) => {
   });
 });
 
+// Debug endpoint - returns diagnostic information for troubleshooting
+app.get('/api/debug', (_req, res) => {
+  const isSpcs = fs.existsSync(SPCS_TOKEN_PATH);
+  const hasPat = !!process.env.AUTH_TOKEN;
+  const hasSpcsHost = !!process.env.SNOWFLAKE_HOST;
+  const hasWarehouse = !!process.env.WAREHOUSE;
+  
+  res.json({
+    timestamp: new Date().toISOString(),
+    environment: {
+      isSpcs: isSpcs,
+      isContainer: isContainer,
+      nodeVersion: process.version,
+      platform: process.platform
+    },
+    authentication: {
+      method: isSpcs ? 'SPCS OAuth' : (hasPat ? 'PAT Token' : 'None'),
+      hasOAuthToken: isSpcs,
+      hasPATToken: hasPat,
+      oauthTokenPath: SPCS_TOKEN_PATH,
+      oauthTokenExists: isSpcs
+    },
+    routing: {
+      snowflakeHost: process.env.SNOWFLAKE_HOST || 'not set (using account URL)',
+      accountUrl: process.env.SNOWFLAKE_ACCOUNT_URL || 'not set',
+      baseUrl: hasSpcsHost && isSpcs ? `https://${process.env.SNOWFLAKE_HOST}` : (process.env.SNOWFLAKE_ACCOUNT_URL || 'not set')
+    },
+    configuration: {
+      agentName: process.env.AGENT_NAME || 'NOT SET',
+      agentDatabase: process.env.AGENT_DB || 'NOT SET',
+      agentSchema: process.env.AGENT_SCHEMA || 'NOT SET',
+      warehouse: process.env.WAREHOUSE || 'NOT SET - REQUIRED!',
+      hasWarehouse: hasWarehouse
+    },
+    status: {
+      allEnvVarsSet: !!(process.env.SNOWFLAKE_ACCOUNT_URL && process.env.AGENT_NAME && 
+                         process.env.AGENT_DB && process.env.AGENT_SCHEMA && hasWarehouse),
+      authConfigured: isSpcs || hasPat,
+      readyToRun: !!(process.env.AGENT_NAME && hasWarehouse && (isSpcs || hasPat))
+    }
+  });
+});
+
 // Verify agent exists
 app.get('/api/agent/:name/describe', async (req, res) => {
   try {
@@ -129,7 +194,8 @@ app.get('/api/agent/:name/describe', async (req, res) => {
 
 // Simple helper to call Snowflake REST API
 async function sfFetch(path, method = 'GET', body) {
-  const url = `${process.env.SNOWFLAKE_ACCOUNT_URL}${path}`;
+  const baseUrl = getBaseUrl();
+  const url = `${baseUrl}${path}`;
   console.log(`[sfFetch] ${method} ${url}`);
   const resp = await fetch(url, {
     method,
@@ -165,7 +231,8 @@ app.post('/api/agent/:name/run', async (req, res) => {
     // Use the agent:run endpoint (note the colon!)
     // Ref: https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents-run
     const runPath = `/api/v2/databases/${process.env.AGENT_DB}/schemas/${process.env.AGENT_SCHEMA}/agents/${name}:run`;
-    const url = `${process.env.SNOWFLAKE_ACCOUNT_URL}${runPath}`;
+    const baseUrl = getBaseUrl();
+    const url = `${baseUrl}${runPath}`;
     
     console.log(`[run] POST ${url}`);
 
@@ -196,6 +263,14 @@ app.post('/api/agent/:name/run', async (req, res) => {
     // Build request body
     const requestBody = { messages };
 
+    // Add warehouse for query execution
+    if (process.env.WAREHOUSE) {
+      requestBody.warehouse = process.env.WAREHOUSE;
+      console.log(`[run] Using warehouse: ${process.env.WAREHOUSE}`);
+    } else {
+      console.warn('[run] WARNING: WAREHOUSE environment variable not set!');
+    }
+
     // Add thread_id and parent_message_id ONLY if continuing an existing conversation
     // For new conversations: omit these fields entirely (Snowflake creates new thread)
     // For follow-ups: include both fields with actual thread IDs
@@ -203,6 +278,9 @@ app.post('/api/agent/:name/run', async (req, res) => {
       requestBody.thread_id = thread_id;
       requestBody.parent_message_id = parent_message_id;
     }
+
+    // Log the full request body for debugging
+    console.log(`[run] Request body:`, JSON.stringify(requestBody, null, 2));
 
     const response = await fetch(url, {
       method: 'POST',

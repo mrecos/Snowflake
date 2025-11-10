@@ -6,6 +6,7 @@
 
 **Automatic OAuth Authentication for SPCS:**
 - SPCS deployment now uses automatic OAuth token from `/snowflake/session/token`
+- **Uses `SNOWFLAKE_HOST` for internal routing** (critical for OAuth to work)
 - No PAT token required for SPCS deployment (simplified secrets management)
 - **Bypasses IP restrictions and network policies** (uses Snowflake internal routing)
 - More secure: uses service identity instead of personal credentials
@@ -15,10 +16,19 @@
 
 **`backend/server.js`:**
 - Added `getAuthHeaders()` function that auto-detects environment
+- Added `getBaseUrl()` function that selects routing based on environment:
+  - **SPCS mode**: Uses `SNOWFLAKE_HOST` environment variable (automatically provided by SPCS)
+  - **Local mode**: Uses `SNOWFLAKE_ACCOUNT_URL` from `.env`
 - SPCS mode: Reads OAuth token from `/snowflake/session/token` and adds `X-Snowflake-Authorization-Token-Type: OAUTH` header
 - Local mode: Uses `AUTH_TOKEN` from environment (backward compatible)
-- Updated health endpoint to show authentication method (`SPCS OAuth` vs `PAT Token`)
-- Enhanced startup logging to display authentication mode
+- **Added `warehouse` parameter to agent:run requests** (fixes "requires default warehouse" error)
+- **Enhanced logging and debugging:**
+  - Health endpoint now logs all environment variables with clear status
+  - Run endpoint logs full request body before sending
+  - Warnings when WAREHOUSE is not set
+  - Shows SNOWFLAKE_HOST value when using SPCS OAuth
+- Updated health endpoint to show authentication method and all config values
+- Enhanced startup logging to display authentication mode and routing URL
 - Made `AUTH_TOKEN` optional in `REQUIRED_ENV` (only needed locally)
 
 **`deploy.sql`:**
@@ -33,10 +43,12 @@
 
 **`docs/SPCS_DEPLOYMENT.md`:**
 - Removed PAT token from prerequisites
-- Added "Authentication in SPCS" section explaining OAuth
+- Added "Authentication in SPCS" section explaining OAuth and `SNOWFLAKE_HOST`
+- Documented how internal routing works with SPCS
 - Updated troubleshooting to remove PAT-related issues
-- Added OAuth verification steps
+- Added OAuth and SNOWFLAKE_HOST verification steps
 - Clarified that only 5 secrets are needed
+- Explained why OAuth token requires `SNOWFLAKE_HOST` routing
 
 ### Benefits
 
@@ -45,6 +57,20 @@
 - ✅ **More secure**: Service identity vs personal credentials
 - ✅ **Backward compatible**: Local deployment unchanged
 - ✅ **Production ready**: Uses Snowflake's recommended auth method for SPCS
+
+**UI Enhancements:**
+- **Debug Panel**: Added in-app debug panel for troubleshooting SPCS deployments
+  - Discreet 🔍 button in top-right status bar
+  - Shows deployment environment (SPCS vs Local)
+  - Displays authentication method and token status
+  - Shows routing configuration (SNOWFLAKE_HOST vs Account URL)
+  - **Highlights warehouse configuration** (key issue for agent queries)
+  - Color-coded status indicators (green = ok, red = error, orange = warning)
+  - Real-time refresh of diagnostic data
+  - Accessible without needing SPCS log access
+
+**New Files:**
+- `DEBUG_WAREHOUSE_ISSUE.md`: Step-by-step diagnostic guide for troubleshooting warehouse configuration issues
 
 ### References
 

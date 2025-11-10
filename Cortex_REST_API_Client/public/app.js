@@ -1046,4 +1046,154 @@ document.getElementById('btnSend').onclick = async () => {
   }
 };
 
+// ===== DEBUG PANEL =====
+
+async function fetchDebugInfo() {
+  try {
+    const data = await j('/api/debug');
+    return data;
+  } catch (e) {
+    console.error('Failed to fetch debug info:', e);
+    return { error: String(e) };
+  }
+}
+
+function renderDebugInfo(data) {
+  if (data.error) {
+    return `<div class="debug-section">
+      <div class="debug-section-title">Error</div>
+      <div class="debug-value status-error">${data.error}</div>
+    </div>`;
+  }
+  
+  let html = '';
+  
+  // Status Overview
+  html += `<div class="debug-section">
+    <div class="debug-section-title">Status Overview</div>
+    <div class="debug-row">
+      <span class="debug-key">Ready to Run:</span>
+      <span class="debug-value ${data.status?.readyToRun ? 'status-ok' : 'status-error'}">
+        ${data.status?.readyToRun ? '✓ YES' : '✗ NO'}
+      </span>
+    </div>
+    <div class="debug-row">
+      <span class="debug-key">Auth Configured:</span>
+      <span class="debug-value ${data.status?.authConfigured ? 'status-ok' : 'status-error'}">
+        ${data.status?.authConfigured ? '✓ YES' : '✗ NO'}
+      </span>
+    </div>
+    <div class="debug-row">
+      <span class="debug-key">All Env Vars Set:</span>
+      <span class="debug-value ${data.status?.allEnvVarsSet ? 'status-ok' : 'status-error'}">
+        ${data.status?.allEnvVarsSet ? '✓ YES' : '✗ NO'}
+      </span>
+    </div>
+  </div>`;
+  
+  // Environment
+  html += `<div class="debug-section">
+    <div class="debug-section-title">Environment</div>
+    <div class="debug-row">
+      <span class="debug-key">Deployment:</span>
+      <span class="debug-value">${data.environment?.isSpcs ? 'SPCS' : 'Local'}</span>
+    </div>
+    <div class="debug-row">
+      <span class="debug-key">Container:</span>
+      <span class="debug-value">${data.environment?.isContainer ? 'Yes' : 'No'}</span>
+    </div>
+    <div class="debug-row">
+      <span class="debug-key">Node Version:</span>
+      <span class="debug-value">${data.environment?.nodeVersion || 'unknown'}</span>
+    </div>
+  </div>`;
+  
+  // Authentication
+  html += `<div class="debug-section">
+    <div class="debug-section-title">Authentication</div>
+    <div class="debug-row">
+      <span class="debug-key">Method:</span>
+      <span class="debug-value ${data.authentication?.method === 'None' ? 'status-error' : 'status-ok'}">
+        ${data.authentication?.method || 'Unknown'}
+      </span>
+    </div>
+    <div class="debug-row">
+      <span class="debug-key">OAuth Token:</span>
+      <span class="debug-value">${data.authentication?.hasOAuthToken ? '✓ Present' : '✗ Not Found'}</span>
+    </div>
+    <div class="debug-row">
+      <span class="debug-key">PAT Token:</span>
+      <span class="debug-value">${data.authentication?.hasPATToken ? '✓ Present' : '✗ Not Found'}</span>
+    </div>
+  </div>`;
+  
+  // Routing
+  html += `<div class="debug-section">
+    <div class="debug-section-title">Routing</div>
+    <div class="debug-row">
+      <span class="debug-key">Snowflake Host:</span>
+      <span class="debug-value" style="font-size: 11px;">${data.routing?.snowflakeHost || 'not set'}</span>
+    </div>
+    <div class="debug-row">
+      <span class="debug-key">Account URL:</span>
+      <span class="debug-value" style="font-size: 11px;">${data.routing?.accountUrl || 'not set'}</span>
+    </div>
+    <div class="debug-row">
+      <span class="debug-key">Base URL:</span>
+      <span class="debug-value" style="font-size: 11px;">${data.routing?.baseUrl || 'not set'}</span>
+    </div>
+  </div>`;
+  
+  // Configuration
+  const warehouseOk = data.configuration?.hasWarehouse;
+  html += `<div class="debug-section">
+    <div class="debug-section-title">Configuration</div>
+    <div class="debug-row">
+      <span class="debug-key">Agent Name:</span>
+      <span class="debug-value">${data.configuration?.agentName || 'NOT SET'}</span>
+    </div>
+    <div class="debug-row">
+      <span class="debug-key">Database:</span>
+      <span class="debug-value">${data.configuration?.agentDatabase || 'NOT SET'}</span>
+    </div>
+    <div class="debug-row">
+      <span class="debug-key">Schema:</span>
+      <span class="debug-value">${data.configuration?.agentSchema || 'NOT SET'}</span>
+    </div>
+    <div class="debug-row">
+      <span class="debug-key">Warehouse:</span>
+      <span class="debug-value ${warehouseOk ? 'status-ok' : 'status-error'}">
+        ${data.configuration?.warehouse || 'NOT SET - REQUIRED!'}
+      </span>
+    </div>
+  </div>`;
+  
+  // Timestamp
+  html += `<div class="debug-timestamp">
+    Updated: ${new Date(data.timestamp).toLocaleTimeString()}
+  </div>`;
+  
+  return html;
+}
+
+// Debug panel toggle
+document.getElementById('btnDebugToggle').onclick = async () => {
+  const panel = document.getElementById('debugPanel');
+  const content = document.getElementById('debugContent');
+  
+  if (panel.style.display === 'none') {
+    panel.style.display = 'flex';
+    content.innerHTML = '<p>Loading debug information...</p>';
+    const debugData = await fetchDebugInfo();
+    content.innerHTML = renderDebugInfo(debugData);
+  } else {
+    panel.style.display = 'none';
+  }
+};
+
+// Debug panel close
+document.getElementById('btnDebugClose').onclick = () => {
+  document.getElementById('debugPanel').style.display = 'none';
+};
+
 

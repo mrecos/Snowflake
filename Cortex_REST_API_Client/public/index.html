@@ -18,6 +18,18 @@
     <!-- Status Indicator (Fixed Position) -->
     <div class="status-indicator">
       Status: <span class="status-text" id="statusText">Checking...</span>
+      <button id="btnDebugToggle" class="btn-debug-toggle" title="Show Debug Info">🔍</button>
+    </div>
+
+    <!-- Debug Panel (Hidden by default) -->
+    <div id="debugPanel" class="debug-panel" style="display: none;">
+      <div class="debug-header">
+        <h3>Debug Information</h3>
+        <button id="btnDebugClose" class="btn-debug-close">×</button>
+      </div>
+      <div class="debug-content" id="debugContent">
+        <p>Loading debug information...</p>
+      </div>
     </div>
 
     <main class="container">
