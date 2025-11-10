@@ -1,3 +1,6 @@
+# Update: 11/10/25 - Now deployable in SPCS! See `docs/SPCS_DEPLOYMENT.md` and `deploy.sql` 
+
+
 # Snowflake Cortex Agent REST API Client
 
 A lightweight, configurable web application for interacting with Snowflake Cortex Agents via REST API. Built for easy customization and sharing with coworkers.

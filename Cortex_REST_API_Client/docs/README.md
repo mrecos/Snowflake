@@ -1,6 +1,4 @@
 # Documentation
-# Update: 11/10/25 - Now deployable in SPCS! See `docs/SPCS_DEPLOYMENT.md` and `deploy.sql` 
-
 
 This directory contains additional documentation and reference materials for the Snowflake Cortex Agent REST API Client.
 
