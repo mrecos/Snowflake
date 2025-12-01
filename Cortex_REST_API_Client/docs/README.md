@@ -10,6 +10,8 @@ This directory contains additional documentation and reference materials for the
 
 - **[SPCS_DEPLOYMENT.md](./SPCS_DEPLOYMENT.md)** - Comprehensive guide to deploying the application as a containerized service in Snowpark Container Services (SPCS), including architecture, deployment steps, monitoring, cost optimization, and troubleshooting.
 
+- **[SPCS_OAUTH_GUIDE.md](./SPCS_OAUTH_GUIDE.md)** - 🔑 **General-Purpose Guide:** How to use SPCS OAuth tokens to query Snowflake data and call REST APIs from containerized applications. Language-agnostic explanation with Python examples. Useful for any SPCS application or Native App.
+
 - **[TROUBLESHOOTING_WAREHOUSE.md](./TROUBLESHOOTING_WAREHOUSE.md)** - ⚠️ **Most Common SPCS Issue:** Detailed diagnostic guide for resolving warehouse permission errors when the agent cannot execute queries in SPCS.
 
 - **[TESTING.md](./TESTING.md)** - Instructions for testing the application and troubleshooting common issues.
