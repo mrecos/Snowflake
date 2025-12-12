@@ -1,0 +1,28 @@
+{
+  "appTitle": "Cortex Agent<br>REST API",
+  "maxConversations": 10,
+  "maxMessagesPerConversation": 10,
+  "presets": [
+    {
+      "label": "Explore Table clustering health",
+      "prompt": "Show clustering health for top 5 largest tables."
+    },
+    {
+      "label": "How to benefit from QAS eligibility",
+      "prompt": "Estimate QAS for top 5 queries running over 2 minutes"
+    },
+    {
+      "label": "Retrieve Query operator stats",
+      "prompt": "Show operator stats for the last 5 queries running over 2 minutes."
+    },
+    {
+      "label": "Estimate search optimization costs",
+      "prompt": "Estimate search optimization costs for top 5 most queried tables."
+    },
+    {
+      "label": "Detail top warehouses",
+      "prompt": "What are the top 5 most expensive warehouses this month and how can I optimize them?"
+    }
+  ]
+}
+

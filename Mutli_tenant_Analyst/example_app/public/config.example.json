@@ -1,0 +1,21 @@
+{
+  "_comment": "Copy this file to config.json and customize UI preferences (agent connection lives in backend/.env)",
+  "appTitle": "Cortex Agent<br>REST API",
+  "maxConversations": 10,
+  "maxMessagesPerConversation": 10,
+  "presets": [
+    {
+      "label": "Clustering health",
+      "prompt": "Show clustering health for SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY"
+    },
+    {
+      "label": "Top warehouses",
+      "prompt": "What are the top 5 most expensive warehouses this month?"
+    },
+    {
+      "label": "Custom question 1",
+      "prompt": "Your custom prompt here"
+    }
+  ]
+}
+

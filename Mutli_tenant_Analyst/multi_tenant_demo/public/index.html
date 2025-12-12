@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cortex Secure Multi-Tenant Demo</title>
+  <link rel="stylesheet" href="/styles.css">
+  <!-- Highlight.js for SQL syntax highlighting -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/sql.min.js"></script>
+</head>
+<body>
+  <!-- Status Indicator -->
+  <div class="status-indicator">
+    <span class="status-dot" id="statusDot"></span>
+    <span class="status-text" id="statusText">Connecting...</span>
+    <button id="btnDebugToggle" class="btn-debug-toggle" title="Show Debug Info">🔍</button>
+  </div>
+
+  <!-- Debug Panel -->
+  <div id="debugPanel" class="debug-panel" style="display: none;">
+    <div class="debug-header">
+      <h3>Debug Information</h3>
+      <button id="btnDebugClose" class="btn-debug-close">×</button>
+    </div>
+    <div class="debug-content" id="debugContent">
+      <p>Loading...</p>
+    </div>
+  </div>
+
+  <main class="container">
+    <!-- Left Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-branding" id="appBranding">Cortex Secure<br>Multi-Tenant Demo</div>
+      
+      <!-- TENANT SELECTOR - Key Feature -->
+      <section class="sidebar-section tenant-section">
+        <h2 class="sidebar-section-title">
+          <span class="tenant-icon">🔒</span> Active Tenant
+        </h2>
+        <div class="tenant-selector-wrapper">
+          <select id="tenantSelector" class="tenant-selector">
+            <option value="TENANT_100">Tenant A (TENANT_100)</option>
+            <option value="TENANT_200">Tenant B (TENANT_200)</option>
+            <option value="TENANT_300">Tenant C (TENANT_300)</option>
+          </select>
+          <div class="tenant-badge" id="tenantBadge">TENANT_100</div>
+        </div>
+        <p class="tenant-hint">Switch tenants to verify data isolation</p>
+      </section>
+      
+      <section class="sidebar-section">
+        <button id="btnNewChat" class="btn new-chat">New Chat</button>
+      </section>
+      
+      <section class="sidebar-section">
+        <h2 class="sidebar-section-title">Sample Questions</h2>
+        <div id="presetsContainer" class="presets-container"></div>
+      </section>
+      
+      <section class="sidebar-section">
+        <h2 class="sidebar-section-title">Conversations</h2>
+        <div id="conversationHistory" class="conversation-list"></div>
+        <button id="btnClearHistory" class="btn secondary">Clear History</button>
+      </section>
+    </aside>
+    
+    <!-- Main Content Area -->
+    <section class="main-content">
+      <!-- Welcome Section -->
+      <div id="welcomeSection" class="welcome-section">
+        <h1 class="welcome-h1" id="welcomeH1">Multi-Tenant Data Isolation Demo</h1>
+        <h2 class="welcome-h2">Ask questions about your sales data</h2>
+        <p class="welcome-subtitle">
+          The same question will return different results for each tenant.
+          <br>Switch tenants in the sidebar to verify isolation.
+        </p>
+      </div>
+
+      <!-- Input Section -->
+      <div class="input-section">
+        <div class="input-label-row">
+          <label for="prompt" class="input-label">Ask A Question</label>
+          <span id="tenantIndicator" class="tenant-indicator">Querying as: <strong>TENANT_100</strong></span>
+        </div>
+        <div class="input-wrapper">
+          <textarea id="prompt" rows="3" placeholder="e.g., What are the total sales? Show me monthly trends..."></textarea>
+          <button id="btnSend" class="btn primary" title="Send message"></button>
+        </div>
+      </div>
+
+      <!-- Chat Messages Container -->
+      <div id="result" class="response-container" style="display: none;">
+        <!-- Messages will be appended here -->
+      </div>
+      
+      <!-- SQL Debug Panel -->
+      <details id="sqlDebugDetails">
+        <summary>Show Generated SQL</summary>
+        <div class="sql-debug-content">
+          <p class="sql-debug-note">
+            <strong>Security Check:</strong> The SQL below queries <code>V_SEMANTIC_SALES</code> (the secure view).
+            It does NOT contain any tenant filter - isolation happens at the view level.
+          </p>
+          <pre id="generatedSql" class="sql-code-block"><code class="language-sql">-- No SQL generated yet</code></pre>
+        </div>
+      </details>
+    </section>
+  </main>
+
+  <!-- Scroll to Bottom Button -->
+  <button id="scrollToBottom" class="scroll-to-bottom" title="Scroll to bottom">↓</button>
+  
+  <script src="/app.js"></script>
+</body>
+</html>
+

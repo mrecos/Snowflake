@@ -1,0 +1,167 @@
+# =============================================================================
+# Cortex Secure Multi-Tenant Demo - Semantic Model
+# =============================================================================
+# This semantic model points to V_SEMANTIC_SALES (the secure view),
+# NOT the raw table. It is intentionally unaware of multi-tenancy.
+# 
+# IMPORTANT: Do NOT include CONTAINER_ID in this model.
+# The tenant filtering happens at the view level via session variables.
+# =============================================================================
+
+name: SALES_SEMANTIC_MODEL
+description: >
+  Sales analytics semantic model for analyzing sales performance, 
+  product trends, and regional distribution. This model enables 
+  natural language queries about revenue, quantities, and profitability.
+
+# Instructions for the AI - how to interpret queries
+instructions: >
+  You are analyzing sales data for a business. When users ask about:
+  - "revenue", "sales", or "total sales" → Use SUM(SALES_AMOUNT)
+  - "profit" → Calculate SALES_AMOUNT * PROFIT_MARGIN
+  - "units sold" or "quantity" → Use SUM(QUANTITY)
+  - "average sale" or "average order" → Use AVG(SALES_AMOUNT)
+  - "by month" or "monthly" → Group by DATE_TRUNC('MONTH', ORDER_DATE)
+  - "by quarter" → Group by DATE_TRUNC('QUARTER', ORDER_DATE)
+  
+  Always format currency values with 2 decimal places.
+  When showing trends, order by date ascending.
+
+# The source table - this is the SECURE VIEW, not the raw table
+tables:
+  - name: V_SEMANTIC_SALES
+    description: >
+      Sales transactions including order details, product information,
+      regional data, and financial metrics.
+    
+    # Define the columns available for analysis
+    columns:
+      - name: ORDER_DATE
+        description: The date when the order was placed
+        data_type: DATE
+        sample_values: ['2024-01-15', '2024-02-20', '2024-03-10']
+        
+      - name: PRODUCT_LINE
+        description: >
+          The category of products sold. 
+          Values: Electronics, Furniture, Software
+        data_type: VARCHAR
+        sample_values: ['Electronics', 'Furniture', 'Software']
+        
+      - name: PRODUCT_NAME
+        description: The specific product name within a product line
+        data_type: VARCHAR
+        sample_values: ['Laptop Pro 15"', 'Standing Desk', 'CRM License']
+        
+      - name: REGION
+        description: >
+          Geographic region where the sale occurred.
+          Values: North, South, East, West, EMEA
+        data_type: VARCHAR
+        sample_values: ['North', 'South', 'East', 'West', 'EMEA']
+        
+      - name: QUANTITY
+        description: Number of units sold in the transaction
+        data_type: INTEGER
+        sample_values: [1, 5, 10]
+        
+      - name: SALES_AMOUNT
+        description: >
+          Total revenue from the transaction in USD.
+          This is the primary metric for "sales" or "revenue" queries.
+        data_type: DECIMAL
+        sample_values: [1500.00, 3200.50, 750.25]
+        
+      - name: PROFIT_MARGIN
+        description: >
+          Profit margin as a decimal (0.10 = 10%, 0.35 = 35%).
+          Multiply by SALES_AMOUNT to get profit dollars.
+        data_type: DECIMAL
+        sample_values: [0.15, 0.25, 0.35]
+
+# Time dimension configuration
+time_dimensions:
+  - name: ORDER_DATE
+    description: Primary time dimension for trend analysis
+    granularities:
+      - day
+      - week
+      - month
+      - quarter
+      - year
+
+# Predefined metrics for common calculations
+metrics:
+  - name: total_revenue
+    description: Total sales revenue
+    expression: SUM(SALES_AMOUNT)
+    data_type: DECIMAL
+    
+  - name: total_profit
+    description: Total profit (revenue × margin)
+    expression: SUM(SALES_AMOUNT * PROFIT_MARGIN)
+    data_type: DECIMAL
+    
+  - name: total_quantity
+    description: Total units sold
+    expression: SUM(QUANTITY)
+    data_type: INTEGER
+    
+  - name: avg_order_value
+    description: Average sales amount per transaction
+    expression: AVG(SALES_AMOUNT)
+    data_type: DECIMAL
+    
+  - name: avg_profit_margin
+    description: Average profit margin across transactions
+    expression: AVG(PROFIT_MARGIN)
+    data_type: DECIMAL
+    
+  - name: transaction_count
+    description: Number of transactions
+    expression: COUNT(*)
+    data_type: INTEGER
+
+# Sample questions to help the AI understand query patterns
+sample_questions:
+  - question: "What are the total sales?"
+    sql: "SELECT SUM(SALES_AMOUNT) as TOTAL_SALES FROM V_SEMANTIC_SALES"
+    
+  - question: "Show sales by product line"
+    sql: >
+      SELECT PRODUCT_LINE, SUM(SALES_AMOUNT) as SALES
+      FROM V_SEMANTIC_SALES
+      GROUP BY PRODUCT_LINE
+      ORDER BY SALES DESC
+      
+  - question: "What are the monthly sales trends?"
+    sql: >
+      SELECT DATE_TRUNC('MONTH', ORDER_DATE) as MONTH, 
+             SUM(SALES_AMOUNT) as MONTHLY_SALES
+      FROM V_SEMANTIC_SALES
+      GROUP BY MONTH
+      ORDER BY MONTH
+      
+  - question: "Which region has the highest revenue?"
+    sql: >
+      SELECT REGION, SUM(SALES_AMOUNT) as REVENUE
+      FROM V_SEMANTIC_SALES
+      GROUP BY REGION
+      ORDER BY REVENUE DESC
+      LIMIT 1
+      
+  - question: "Show top 5 products by sales"
+    sql: >
+      SELECT PRODUCT_NAME, SUM(SALES_AMOUNT) as SALES
+      FROM V_SEMANTIC_SALES
+      GROUP BY PRODUCT_NAME
+      ORDER BY SALES DESC
+      LIMIT 5
+      
+  - question: "What is the average profit margin by product line?"
+    sql: >
+      SELECT PRODUCT_LINE, AVG(PROFIT_MARGIN) as AVG_MARGIN
+      FROM V_SEMANTIC_SALES
+      GROUP BY PRODUCT_LINE
+      ORDER BY AVG_MARGIN DESC
+

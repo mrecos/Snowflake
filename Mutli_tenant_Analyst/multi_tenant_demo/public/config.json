@@ -1,0 +1,32 @@
+{
+  "appTitle": "Cortex Secure<br>Multi-Tenant Demo",
+  "maxConversations": 10,
+  "maxMessagesPerConversation": 20,
+  "presets": [
+    {
+      "label": "Total Sales",
+      "prompt": "What are the total sales?"
+    },
+    {
+      "label": "Sales by Product Line",
+      "prompt": "Show sales breakdown by product line"
+    },
+    {
+      "label": "Monthly Trends",
+      "prompt": "Show monthly sales trends"
+    },
+    {
+      "label": "Top 5 Products",
+      "prompt": "What are the top 5 products by revenue?"
+    },
+    {
+      "label": "Regional Performance",
+      "prompt": "Compare sales by region"
+    },
+    {
+      "label": "Profit Analysis",
+      "prompt": "What is the total profit and average profit margin?"
+    }
+  ]
+}
+
