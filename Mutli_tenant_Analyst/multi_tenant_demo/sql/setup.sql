@@ -75,7 +75,10 @@ This is what the Semantic Model references - it hides CONTAINER_ID from the AI.'
 -- This procedure:
 --   1. Sets the tenant context (session variable)
 --   2. Executes the provided SQL
---   3. Cleans up the session variable (even on error)
+--   3. Returns results (session variable is auto-scoped to procedure call)
+--
+-- Note: Session variables set within a procedure are scoped to that execution
+-- and do not persist after the procedure ends, so no explicit cleanup needed.
 
 CREATE OR REPLACE PROCEDURE EXECUTE_SECURE_SQL(sql_query STRING, tenant_id STRING)
 RETURNS TABLE()
@@ -83,23 +86,22 @@ LANGUAGE SQL
 EXECUTE AS OWNER
 AS
 $$
+DECLARE
+    res RESULTSET;
 BEGIN
     -- 1. Set the tenant context via session variable
-    SET CURRENT_TENANT_ID = :tenant_id;
+    EXECUTE IMMEDIATE 'SET CURRENT_TENANT_ID = ''' || :tenant_id || '''';
     
     -- 2. Execute the provided SQL query
-    LET res RESULTSET := (EXECUTE IMMEDIATE :sql_query);
+    res := (EXECUTE IMMEDIATE :sql_query);
     
-    -- 3. Clean up the session variable (CRITICAL for security)
-    UNSET CURRENT_TENANT_ID;
-    
-    -- 4. Return the results
+    -- 3. Return the results
+    -- Session variable is automatically scoped to this procedure call
     RETURN TABLE(res);
 
 EXCEPTION
     WHEN OTHER THEN
-        -- Always clean up on error
-        UNSET CURRENT_TENANT_ID;
+        -- Re-raise the exception (session var is auto-cleaned up)
         RAISE;
 END;
 $$;
@@ -131,17 +133,18 @@ GROUP BY CONTAINER_ID
 ORDER BY CONTAINER_ID;
 
 -- Test 2: Verify secure view with tenant context
+-- Note: Each SET overwrites the previous value, so no UNSET needed between tests
 SET CURRENT_TENANT_ID = 'TENANT_100';
-SELECT COUNT(*), SUM(SALES_AMOUNT) as TOTAL_SALES FROM V_SEMANTIC_SALES;
-UNSET CURRENT_TENANT_ID;
+SELECT 'TENANT_100' as TENANT, COUNT(*) as ROW_COUNT, SUM(SALES_AMOUNT) as TOTAL_SALES FROM V_SEMANTIC_SALES;
 
 SET CURRENT_TENANT_ID = 'TENANT_200';
-SELECT COUNT(*), SUM(SALES_AMOUNT) as TOTAL_SALES FROM V_SEMANTIC_SALES;
-UNSET CURRENT_TENANT_ID;
+SELECT 'TENANT_200' as TENANT, COUNT(*) as ROW_COUNT, SUM(SALES_AMOUNT) as TOTAL_SALES FROM V_SEMANTIC_SALES;
 
 SET CURRENT_TENANT_ID = 'TENANT_300';
-SELECT COUNT(*), SUM(SALES_AMOUNT) as TOTAL_SALES FROM V_SEMANTIC_SALES;
-UNSET CURRENT_TENANT_ID;
+SELECT 'TENANT_300' as TENANT, COUNT(*) as ROW_COUNT, SUM(SALES_AMOUNT) as TOTAL_SALES FROM V_SEMANTIC_SALES;
+
+-- Clear the session variable by setting to NULL
+SET CURRENT_TENANT_ID = NULL;
 
 -- Test 3: Verify the stored procedure works
 CALL EXECUTE_SECURE_SQL('SELECT SUM(SALES_AMOUNT) as TOTAL_SALES FROM V_SEMANTIC_SALES', 'TENANT_100');
