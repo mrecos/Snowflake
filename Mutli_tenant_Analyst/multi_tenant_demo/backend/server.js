@@ -1,14 +1,14 @@
 /**
  * Cortex Secure Multi-Tenant Demo - Backend Server
  * 
- * This server implements the App-Side Orchestration pattern:
+ * This server implements secure multi-tenant Q&A using Cortex Analyst REST API:
  * 1. Receives user question + tenant ID from frontend
- * 2. Calls Cortex Analyst to generate SQL (unaware of tenancy)
- * 3. Executes SQL through EXECUTE_SECURE_SQL stored procedure
+ * 2. Calls Cortex Analyst API to generate SQL (Analyst is unaware of tenancy)
+ * 3. Executes SQL through EXECUTE_SECURE_SQL stored procedure (adds tenant context)
  * 4. Returns results to frontend
  * 
- * The stored procedure sets the CURRENT_TENANT_ID session variable,
- * which filters the V_SEMANTIC_SALES view to show only that tenant's data.
+ * The stored procedure uses the "Session-Keyed Context Table" pattern to isolate
+ * tenant data at query time.
  */
 
 import express from 'express';
@@ -38,12 +38,13 @@ console.log(`[server] PUBLIC_DIR: ${PUBLIC_DIR}`);
 
 app.use(express.static(PUBLIC_DIR));
 
-// Required environment variables
+// Required environment variables for Cortex Analyst approach
 const REQUIRED_ENV = [
   'SNOWFLAKE_ACCOUNT_URL',
-  'ANALYST_DB',
-  'ANALYST_SCHEMA',
+  'SEMANTIC_VIEW',  // Fully qualified: DB.SCHEMA.SEMANTIC_VIEW_NAME
   'WAREHOUSE'
+  // AUTH_TOKEN is optional - only needed for local deployment
+  // SPCS automatically provides OAuth token at /snowflake/session/token
 ];
 
 const SPCS_TOKEN_PATH = '/snowflake/session/token';
@@ -72,7 +73,7 @@ function getAuthHeaders() {
   if (fs.existsSync(SPCS_TOKEN_PATH)) {
     try {
       const oauthToken = fs.readFileSync(SPCS_TOKEN_PATH, 'utf-8').trim();
-      console.log('[auth] Using SPCS OAuth token');
+      console.log('[auth] Using SPCS OAuth token from /snowflake/session/token');
       return {
         'Authorization': `Bearer ${oauthToken}`,
         'X-Snowflake-Authorization-Token-Type': 'OAUTH',
@@ -85,9 +86,9 @@ function getAuthHeaders() {
     }
   }
   
-  // Priority 2: PAT token from environment
+  // Priority 2: PAT token from environment (local deployment)
   if (process.env.AUTH_TOKEN) {
-    console.log('[auth] Using PAT token from AUTH_TOKEN');
+    console.log('[auth] Using PAT token from AUTH_TOKEN environment variable');
     return {
       'Authorization': `Bearer ${process.env.AUTH_TOKEN}`,
       'Content-Type': 'application/json',
@@ -95,17 +96,37 @@ function getAuthHeaders() {
     };
   }
   
-  throw new Error('No authentication method available. Set AUTH_TOKEN in .env file.');
+  throw new Error('No authentication method available. Local deployment requires AUTH_TOKEN in .env file.');
 }
 
 /**
  * Get the base URL for Snowflake API calls
  */
 function getBaseUrl() {
+  // SPCS provides SNOWFLAKE_HOST for internal routing
   if (fs.existsSync(SPCS_TOKEN_PATH) && process.env.SNOWFLAKE_HOST) {
+    console.log(`[auth] Using SNOWFLAKE_HOST for internal routing: ${process.env.SNOWFLAKE_HOST}`);
     return `https://${process.env.SNOWFLAKE_HOST}`;
   }
+  
+  // Local deployment uses the standard account URL
   return process.env.SNOWFLAKE_ACCOUNT_URL;
+}
+
+/**
+ * Parse semantic view into components
+ */
+function parseSemanticView() {
+  const sv = process.env.SEMANTIC_VIEW || '';
+  const parts = sv.split('.');
+  if (parts.length >= 3) {
+    return {
+      database: parts[0],
+      schema: parts[1],
+      view: parts.slice(2).join('.')
+    };
+  }
+  return { database: '', schema: '', view: sv };
 }
 
 /**
@@ -116,40 +137,42 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 /**
  * Execute a SQL statement via Snowflake SQL API
  */
-async function executeSql(statement, options = {}) {
+async function runSqlStatement(statement, options = {}) {
   const baseUrl = getBaseUrl();
   if (!baseUrl) {
     throw new Error('Snowflake base URL is not configured');
   }
 
+  const svParts = parseSemanticView();
   const headers = getAuthHeaders();
   const payload = {
     statement,
     timeout: options.timeout || 60,
-    database: process.env.ANALYST_DB,
-    schema: process.env.ANALYST_SCHEMA,
+    database: svParts.database,
+    schema: svParts.schema,
     warehouse: process.env.WAREHOUSE,
-    resultSetMetaData: { format: 'jsonv2' }
+    resultSetMetaData: { format: 'jsonv2' },
+    ...options.payloadOverrides
   };
 
   console.log(`[sql] Executing: ${statement.substring(0, 100)}...`);
 
-  const response = await fetch(`${baseUrl}/api/v2/statements`, {
+  const postResp = await fetch(`${baseUrl}/api/v2/statements`, {
     method: 'POST',
     headers,
     body: JSON.stringify(payload)
   });
 
-  const text = await response.text();
-  if (!response.ok) {
-    throw new Error(`SQL API ${response.status}: ${text}`);
+  const postText = await postResp.text();
+  if (!postResp.ok) {
+    throw new Error(`Snowflake SQL API ${postResp.status}: ${postText}`);
   }
 
   let result;
   try {
-    result = JSON.parse(text);
+    result = JSON.parse(postText);
   } catch (e) {
-    throw new Error(`Failed to parse SQL API response: ${e.message}`);
+    throw new Error(`Failed to parse Snowflake SQL API response: ${e.message}`);
   }
 
   // Poll for completion if async
@@ -169,7 +192,7 @@ async function executeSql(statement, options = {}) {
     });
     const statusText = await statusResp.text();
     if (!statusResp.ok) {
-      throw new Error(`SQL API status ${statusResp.status}: ${statusText}`);
+      throw new Error(`Snowflake SQL API status ${statusResp.status}: ${statusText}`);
     }
     result = JSON.parse(statusText);
     attempts++;
@@ -183,86 +206,184 @@ async function executeSql(statement, options = {}) {
 }
 
 /**
- * Call Cortex Analyst to generate SQL from natural language
- * Note: Analyst is unaware of tenancy - it generates SQL for V_SEMANTIC_SALES
+ * Call Cortex Analyst REST API to generate SQL from natural language
+ * 
+ * API Reference: https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-analyst/rest-api
+ * 
+ * Uses the semantic_view parameter to reference the semantic view directly by name.
  */
-async function callCortexAnalyst(question) {
+async function callCortexAnalyst(question, conversationHistory = []) {
   const baseUrl = getBaseUrl();
-  const headers = getAuthHeaders();
+  const semanticView = process.env.SEMANTIC_VIEW;
   
-  // Build the analyst request
-  const payload = {
-    messages: [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: question
-          }
-        ]
-      }
-    ]
+  if (!semanticView) {
+    throw new Error('SEMANTIC_VIEW environment variable is not set');
+  }
+  
+  const apiPath = `/api/v2/cortex/analyst/message`;
+  const url = `${baseUrl}${apiPath}`;
+  
+  console.log(`[analyst] POST ${url}`);
+  console.log(`[analyst] Semantic View: ${semanticView}`);
+
+  // Build messages array with conversation history
+  let messages = [];
+  
+  if (conversationHistory && Array.isArray(conversationHistory) && conversationHistory.length > 0) {
+    messages = conversationHistory.map(msg => ({
+      role: msg.role === 'agent' ? 'analyst' : msg.role,
+      content: typeof msg.content === 'string' 
+        ? [{ type: 'text', text: msg.content }]
+        : msg.content
+    }));
+  }
+  
+  // Add current user message
+  messages.push({
+    role: 'user',
+    content: [{ type: 'text', text: question }]
+  });
+
+  const requestBody = {
+    messages,
+    semantic_view: semanticView
   };
   
-  // Add semantic model reference
-  if (process.env.SEMANTIC_MODEL_FILE) {
-    payload.semantic_model_file = process.env.SEMANTIC_MODEL_FILE;
-  } else if (process.env.SEMANTIC_VIEW) {
-    payload.semantic_view = process.env.SEMANTIC_VIEW;
-  } else {
-    throw new Error('No semantic model configured. Set SEMANTIC_MODEL_FILE or SEMANTIC_VIEW in .env');
-  }
+  console.log(`[analyst] Request body:`, JSON.stringify(requestBody, null, 2));
 
-  console.log(`[analyst] Calling Cortex Analyst with question: ${question}`);
-
-  const response = await fetch(`${baseUrl}/api/v2/cortex/analyst/message`, {
+  const response = await fetch(url, {
     method: 'POST',
-    headers,
-    body: JSON.stringify(payload)
+    headers: getAuthHeaders(),
+    body: JSON.stringify(requestBody)
   });
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`Analyst API ${response.status}: ${text}`);
+    console.error(`[analyst] Error ${response.status}: ${text}`);
+    throw new Error(`Cortex Analyst API ${response.status}: ${text}`);
   }
 
-  // Parse streaming response (SSE format)
-  const text = await response.text();
-  const events = text.split('\n\n').filter(e => e.trim());
+  const result = await response.json();
+  console.log(`[analyst] Response received`);
   
-  let sql = null;
+  // Extract SQL and text from response
+  // Response format: { message: { role: "analyst", content: [{ type: "sql", statement: "..." }, { type: "text", text: "..." }] } }
+  let extractedSql = null;
   let explanation = null;
-  let suggestions = [];
+  let suggestions = null;
   
-  for (const event of events) {
-    const lines = event.split('\n');
-    const dataLine = lines.find(l => l.startsWith('data: '));
-    if (dataLine) {
+  if (result.message?.content) {
+    for (const item of result.message.content) {
+      if (item.type === 'sql' && item.statement) {
+        extractedSql = item.statement;
+        console.log(`[analyst] Extracted SQL: ${extractedSql.substring(0, 100)}...`);
+      }
+      if (item.type === 'text' && item.text) {
+        explanation = item.text;
+      }
+      if (item.type === 'suggestions' && item.suggestions) {
+        suggestions = item.suggestions;
+      }
+    }
+  }
+
+  return {
+    sql: extractedSql,
+    explanation: explanation || 'Query generated.',
+    suggestions,
+    rawResponse: result,
+    requestId: result.request_id,
+    warnings: result.warnings
+  };
+}
+
+/**
+ * Call Cortex Inference REST API for LLM reasoning/analysis
+ * 
+ * This provides rich analysis of query results by sending the data
+ * to an LLM for interpretation and insights.
+ * 
+ * API: POST /api/v2/cortex/inference:complete
+ */
+async function callCortexInference(systemPrompt, userMessage, model = 'claude-3-5-sonnet') {
+  const baseUrl = getBaseUrl();
+  const apiPath = `/api/v2/cortex/inference:complete`;
+  const url = `${baseUrl}${apiPath}`;
+  
+  console.log(`[inference] POST ${url}`);
+  console.log(`[inference] Model: ${model}`);
+
+  const requestBody = {
+    model: model,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userMessage }
+    ]
+  };
+  
+  console.log(`[inference] System prompt: ${systemPrompt.substring(0, 100)}...`);
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(requestBody)
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    console.error(`[inference] Error ${response.status}: ${text}`);
+    throw new Error(`Cortex Inference API ${response.status}: ${text}`);
+  }
+
+  // Cortex Inference returns SSE streaming format (data: {json}\n\n)
+  // We need to parse the SSE format and accumulate the content
+  const rawText = await response.text();
+  console.log(`[inference] Response received (${rawText.length} chars)`);
+  
+  let fullContent = '';
+  let modelUsed = model;
+  let usage = null;
+  const chunks = [];
+  
+  // Parse SSE format: each chunk is "data: {json}\n\n"
+  const lines = rawText.split('\n');
+  for (const line of lines) {
+    if (line.startsWith('data: ')) {
+      const jsonStr = line.slice(6); // Remove "data: " prefix
+      if (jsonStr.trim() === '[DONE]') {
+        continue; // End of stream marker
+      }
       try {
-        const parsed = JSON.parse(dataLine.substring(6));
+        const chunk = JSON.parse(jsonStr);
+        chunks.push(chunk);
         
-        // Extract SQL from content
-        if (parsed.content) {
-          for (const item of parsed.content) {
-            if (item.type === 'sql' && item.statement) {
-              sql = item.statement;
-            }
-            if (item.type === 'text' && item.text) {
-              explanation = item.text;
-            }
-            if (item.type === 'suggestions' && item.suggestions) {
-              suggestions = item.suggestions;
-            }
-          }
+        // Accumulate content from delta
+        if (chunk.choices && chunk.choices[0]?.delta?.content) {
+          fullContent += chunk.choices[0].delta.content;
         }
-      } catch (e) {
-        // Not all events are JSON
+        
+        // Get model and usage info from first/last chunk
+        if (chunk.model) {
+          modelUsed = chunk.model;
+        }
+        if (chunk.usage) {
+          usage = chunk.usage;
+        }
+      } catch (parseErr) {
+        // Skip malformed JSON lines (shouldn't happen normally)
+        console.warn(`[inference] Failed to parse chunk: ${jsonStr.substring(0, 50)}...`);
       }
     }
   }
   
-  return { sql, explanation, suggestions };
+  console.log(`[inference] Accumulated ${fullContent.length} chars from ${chunks.length} chunks`);
+
+  return {
+    content: fullContent,
+    model: modelUsed,
+    usage: usage,
+    rawResponse: { chunks: chunks.length, totalChars: fullContent.length }
+  };
 }
 
 /**
@@ -283,7 +404,7 @@ async function executeSecureSql(sql, tenantId) {
   console.log(`[secure] Executing with tenant context: ${tenantId}`);
   console.log(`[secure] Original SQL: ${sql}`);
   
-  return await executeSql(callStatement);
+  return await runSqlStatement(callStatement);
 }
 
 // =============================================================================
@@ -294,10 +415,17 @@ async function executeSecureSql(sql, tenantId) {
  * Health check endpoint
  */
 app.get('/api/health', (_req, res) => {
-  const missing = REQUIRED_ENV.filter(k => !process.env[k]);
+  const missing = REQUIRED_ENV.filter((k) => !process.env[k]);
   const isSpcs = fs.existsSync(SPCS_TOKEN_PATH);
   const hasPat = !!process.env.AUTH_TOKEN;
   const hasAuth = isSpcs || hasPat;
+  const svParts = parseSemanticView();
+  
+  console.log('[health] Environment check:');
+  console.log(`  SNOWFLAKE_ACCOUNT_URL: ${process.env.SNOWFLAKE_ACCOUNT_URL ? 'set' : 'MISSING'}`);
+  console.log(`  SNOWFLAKE_HOST: ${process.env.SNOWFLAKE_HOST ? process.env.SNOWFLAKE_HOST : 'not set (ok for local)'}`);
+  console.log(`  SEMANTIC_VIEW: ${process.env.SEMANTIC_VIEW || 'MISSING'}`);
+  console.log(`  WAREHOUSE: ${process.env.WAREHOUSE || 'MISSING'}`);
   
   res.json({ 
     ok: missing.length === 0 && hasAuth, 
@@ -305,11 +433,13 @@ app.get('/api/health', (_req, res) => {
     validTenants: VALID_TENANTS,
     config: {
       account: process.env.SNOWFLAKE_ACCOUNT_URL,
-      database: process.env.ANALYST_DB,
-      schema: process.env.ANALYST_SCHEMA,
+      semanticView: process.env.SEMANTIC_VIEW,
+      database: svParts.database,
+      schema: svParts.schema,
       warehouse: process.env.WAREHOUSE,
-      semanticModel: process.env.SEMANTIC_MODEL_FILE || process.env.SEMANTIC_VIEW || 'NOT SET',
-      authMethod: isSpcs ? 'SPCS OAuth' : (hasPat ? 'PAT Token' : 'None')
+      snowflake_host: process.env.SNOWFLAKE_HOST || 'not available',
+      auth_method: isSpcs ? 'SPCS OAuth' : (hasPat ? 'PAT Token' : 'None'),
+      has_auth: hasAuth
     }
   });
 });
@@ -319,12 +449,102 @@ app.get('/api/health', (_req, res) => {
  */
 app.get('/api/app-config', (_req, res) => {
   const uiConfig = loadUiConfig();
+  const svParts = parseSemanticView();
   res.json({
+    semanticView: process.env.SEMANTIC_VIEW || '',
+    database: svParts.database,
+    schema: svParts.schema,
+    warehouse: process.env.WAREHOUSE || '',
     appTitle: uiConfig.appTitle || 'Cortex Secure<br>Multi-Tenant Demo',
     tenants: VALID_TENANTS,
-    presets: Array.isArray(uiConfig.presets) ? uiConfig.presets : [],
     maxConversations: uiConfig.maxConversations || 10,
-    maxMessagesPerConversation: uiConfig.maxMessagesPerConversation || 10
+    maxMessagesPerConversation: uiConfig.maxMessagesPerConversation || 10,
+    presets: Array.isArray(uiConfig.presets) ? uiConfig.presets : []
+  });
+});
+
+/**
+ * Debug endpoint - returns diagnostic information for troubleshooting
+ */
+app.get('/api/debug', async (_req, res) => {
+  const isSpcs = fs.existsSync(SPCS_TOKEN_PATH);
+  const hasPat = !!process.env.AUTH_TOKEN;
+  const hasSpcsHost = !!process.env.SNOWFLAKE_HOST;
+  const svParts = parseSemanticView();
+  const sqlDiagnostics = {
+    currentRole: null,
+    currentWarehouse: null,
+    error: null
+  };
+
+  try {
+    const roleResult = await runSqlStatement('SELECT CURRENT_ROLE() AS CURRENT_ROLE');
+    const rows = Array.isArray(roleResult.data) ? roleResult.data : [];
+    const firstRow = rows[0];
+    if (firstRow && typeof firstRow === 'object') {
+      const key = Object.keys(firstRow).find((k) => k.toLowerCase() === 'current_role');
+      sqlDiagnostics.currentRole = key ? firstRow[key] : Object.values(firstRow)[0];
+    } else if (Array.isArray(firstRow)) {
+      sqlDiagnostics.currentRole = firstRow[0];
+    }
+  } catch (err) {
+    sqlDiagnostics.error = `Unable to query CURRENT_ROLE: ${err.message}`;
+  }
+
+  if (!sqlDiagnostics.error) {
+    try {
+      const warehouseResult = await runSqlStatement('SELECT CURRENT_WAREHOUSE() AS CURRENT_WAREHOUSE');
+      const rows = Array.isArray(warehouseResult.data) ? warehouseResult.data : [];
+      const firstRow = rows[0];
+      if (firstRow && typeof firstRow === 'object') {
+        const key = Object.keys(firstRow).find((k) => k.toLowerCase() === 'current_warehouse');
+        sqlDiagnostics.currentWarehouse = key ? firstRow[key] : Object.values(firstRow)[0];
+      } else if (Array.isArray(firstRow)) {
+        sqlDiagnostics.currentWarehouse = firstRow[0];
+      }
+    } catch (err) {
+      sqlDiagnostics.currentWarehouse = null;
+    }
+  }
+  
+  res.json({
+    timestamp: new Date().toISOString(),
+    environment: {
+      isSpcs: isSpcs,
+      isContainer: isContainer,
+      nodeVersion: process.version,
+      platform: process.platform
+    },
+    authentication: {
+      method: isSpcs ? 'SPCS OAuth' : (hasPat ? 'PAT Token' : 'None'),
+      hasOAuthToken: isSpcs,
+      hasPATToken: hasPat,
+      oauthTokenPath: SPCS_TOKEN_PATH,
+      oauthTokenExists: isSpcs
+    },
+    routing: {
+      snowflakeHost: process.env.SNOWFLAKE_HOST || 'not set (using account URL)',
+      accountUrl: process.env.SNOWFLAKE_ACCOUNT_URL || 'not set',
+      baseUrl: hasSpcsHost && isSpcs ? `https://${process.env.SNOWFLAKE_HOST}` : (process.env.SNOWFLAKE_ACCOUNT_URL || 'not set')
+    },
+    configuration: {
+      semanticView: process.env.SEMANTIC_VIEW || 'NOT SET',
+      database: svParts.database || 'NOT SET',
+      schema: svParts.schema || 'NOT SET',
+      warehouse: process.env.WAREHOUSE || 'NOT SET'
+    },
+    validTenants: VALID_TENANTS,
+    sqlTest: {
+      success: !sqlDiagnostics.error,
+      role: sqlDiagnostics.currentRole,
+      warehouse: sqlDiagnostics.currentWarehouse,
+      error: sqlDiagnostics.error
+    },
+    status: {
+      allEnvVarsSet: !!(process.env.SNOWFLAKE_ACCOUNT_URL && process.env.SEMANTIC_VIEW && process.env.WAREHOUSE),
+      authConfigured: isSpcs || hasPat,
+      readyToRun: !!(process.env.SEMANTIC_VIEW && (isSpcs || hasPat))
+    }
   });
 });
 
@@ -333,13 +553,13 @@ app.get('/api/app-config', (_req, res) => {
  * 
  * Flow:
  * 1. Receive question + tenant ID
- * 2. Call Cortex Analyst to generate SQL (tenant-agnostic)
- * 3. Execute SQL through EXECUTE_SECURE_SQL with tenant context
+ * 2. Call Cortex Analyst API to generate SQL (no execution)
+ * 3. Execute the SQL through EXECUTE_SECURE_SQL with tenant context
  * 4. Return results
  */
 app.post('/api/chat', async (req, res) => {
   try {
-    const { message, tenantId } = req.body;
+    const { message, tenantId, conversationHistory, reasoningMode } = req.body;
     
     if (!message) {
       return res.status(400).json({ ok: false, error: 'Message required' });
@@ -356,90 +576,147 @@ app.post('/api/chat', async (req, res) => {
     console.log(`\n${'='.repeat(60)}`);
     console.log(`[chat] New request from tenant: ${tenantId}`);
     console.log(`[chat] Question: ${message}`);
+    console.log(`[chat] Reasoning Mode: ${reasoningMode ? 'ON' : 'OFF'}`);
     console.log(`${'='.repeat(60)}`);
     
     // Step 1: Call Cortex Analyst to generate SQL
-    const { sql, explanation, suggestions } = await callCortexAnalyst(message);
+    const analystResponse = await callCortexAnalyst(message, conversationHistory);
     
-    if (!sql) {
-      return res.json({
-        ok: true,
-        type: 'text',
-        content: explanation || 'I could not generate a SQL query for that question. Please try rephrasing.',
-        suggestions
-      });
+    // Track verbose data for debugging
+    const verboseData = {
+      analystResponse: {
+        timestamp: new Date().toISOString(),
+        sql: analystResponse.sql || null,
+        explanation: analystResponse.explanation || null,
+        suggestions: analystResponse.suggestions || null,
+        requestId: analystResponse.requestId,
+        warnings: analystResponse.warnings || []
+      },
+      sprocExecution: null,
+      inferenceResponse: null
+    };
+    
+    // Step 2: If SQL was generated, execute through stored procedure with tenant context
+    let finalResultSet = null;
+    let executedSql = analystResponse.sql;
+    
+    if (analystResponse.sql) {
+      console.log(`[chat] Executing SQL with tenant context: ${tenantId}`);
+      
+      try {
+        const secureResult = await executeSecureSql(analystResponse.sql, tenantId);
+        finalResultSet = {
+          data: secureResult.data || [],
+          resultSetMetaData: secureResult.resultSetMetaData || {}
+        };
+        console.log(`[chat] Secure execution returned ${secureResult.data?.length || 0} rows`);
+        
+        // Track sproc execution for verbose mode
+        verboseData.sprocExecution = {
+          timestamp: new Date().toISOString(),
+          sql: `CALL EXECUTE_SECURE_SQL('${analystResponse.sql.replace(/'/g, "''")}', '${tenantId}')`,
+          rowCount: secureResult.data?.length || 0,
+          columnCount: secureResult.resultSetMetaData?.rowType?.length || 0,
+          columns: secureResult.resultSetMetaData?.rowType?.map(c => c.name) || [],
+          rawResponse: secureResult,
+          success: true
+        };
+      } catch (sqlError) {
+        console.error(`[chat] Secure SQL execution failed: ${sqlError.message}`);
+        verboseData.sprocExecution = {
+          timestamp: new Date().toISOString(),
+          sql: `CALL EXECUTE_SECURE_SQL('${analystResponse.sql.replace(/'/g, "''")}', '${tenantId}')`,
+          success: false,
+          error: sqlError.message
+        };
+        return res.status(500).json({ 
+          ok: false, 
+          error: `SQL execution failed: ${sqlError.message}`,
+          sql: analystResponse.sql,
+          verbose: verboseData
+        });
+      }
+    } else {
+      // No SQL generated - might be a clarification or suggestion response
+      console.log(`[chat] No SQL generated - returning analyst explanation`);
     }
     
-    console.log(`[chat] Generated SQL: ${sql}`);
+    // Step 3: If reasoning mode is enabled and we have results, get LLM analysis
+    let finalContent = analystResponse.explanation || 'Query completed.';
     
-    // Step 2: Execute through secure stored procedure with tenant context
-    const result = await executeSecureSql(sql, tenantId);
+    if (reasoningMode && finalResultSet && finalResultSet.data && finalResultSet.data.length > 0) {
+      console.log(`[chat] Reasoning mode enabled - calling Cortex Inference for analysis`);
+      
+      try {
+        const systemPrompt = `You are an expert data analyst. A customer has asked a question about their data. 
+Our AI system interpreted their question and retrieved the following results. 
+Your job is to analyze these results and provide the customer with clear, actionable insights.
+
+Be conversational but professional. Highlight key findings, trends, and any notable observations.
+If the data suggests any recommendations or next steps, include those as well.
+Keep your response concise but insightful.`;
+
+        // Format the results for the LLM
+        const columns = finalResultSet.resultSetMetaData?.rowType?.map(c => c.name) || [];
+        const dataPreview = finalResultSet.data.slice(0, 50); // Limit to first 50 rows to avoid token limits
+        
+        const userMessage = `**Customer's Original Question:**
+${message}
+
+**How Our AI Interpreted This:**
+${analystResponse.explanation || 'Generated SQL query to answer the question.'}
+
+**Query Results (${finalResultSet.data.length} rows):**
+Columns: ${columns.join(', ')}
+Data:
+${JSON.stringify(dataPreview, null, 2)}${finalResultSet.data.length > 50 ? `\n\n(Showing first 50 of ${finalResultSet.data.length} total rows)` : ''}
+
+Please provide an insightful analysis of these results for the customer.`;
+
+        const inferenceResult = await callCortexInference(systemPrompt, userMessage);
+        
+        if (inferenceResult.content) {
+          finalContent = inferenceResult.content;
+          console.log(`[chat] Inference analysis generated successfully`);
+        }
+        
+        // Track inference for verbose mode
+        verboseData.inferenceResponse = {
+          timestamp: new Date().toISOString(),
+          model: inferenceResult.model,
+          usage: inferenceResult.usage,
+          contentLength: inferenceResult.content?.length || 0,
+          success: true
+        };
+        
+      } catch (inferenceError) {
+        console.error(`[chat] Inference failed: ${inferenceError.message}`);
+        // Fall back to analyst explanation if inference fails
+        verboseData.inferenceResponse = {
+          timestamp: new Date().toISOString(),
+          success: false,
+          error: inferenceError.message
+        };
+      }
+    }
     
-    console.log(`[chat] Query returned ${result.data?.length || 0} rows`);
-    
-    // Step 3: Format response
+    // Step 4: Format response
     res.json({
       ok: true,
-      type: 'data',
-      content: explanation,
-      sql: sql,
+      type: finalResultSet ? 'data' : 'text',
+      content: finalContent,
+      sql: executedSql,
       tenantId: tenantId,
-      resultSet: {
-        data: result.data || [],
-        resultSetMetaData: result.resultSetMetaData || {}
-      },
-      suggestions
+      resultSet: finalResultSet,
+      suggestions: analystResponse.suggestions,
+      reasoningMode: reasoningMode || false,
+      verbose: verboseData
     });
     
   } catch (e) {
     console.error(`[chat] Error: ${e.message}`);
     res.status(500).json({ ok: false, error: e.message });
   }
-});
-
-/**
- * Debug endpoint for troubleshooting
- */
-app.get('/api/debug', async (_req, res) => {
-  const isSpcs = fs.existsSync(SPCS_TOKEN_PATH);
-  const hasPat = !!process.env.AUTH_TOKEN;
-  
-  let sqlTest = { success: false, error: null };
-  try {
-    const result = await executeSql('SELECT CURRENT_ROLE() as ROLE, CURRENT_WAREHOUSE() as WAREHOUSE');
-    sqlTest = {
-      success: true,
-      role: result.data?.[0]?.[0] || 'unknown',
-      warehouse: result.data?.[0]?.[1] || 'unknown'
-    };
-  } catch (e) {
-    sqlTest.error = e.message;
-  }
-  
-  res.json({
-    timestamp: new Date().toISOString(),
-    environment: {
-      isSpcs,
-      isContainer,
-      nodeVersion: process.version
-    },
-    authentication: {
-      method: isSpcs ? 'SPCS OAuth' : (hasPat ? 'PAT Token' : 'None'),
-      configured: isSpcs || hasPat
-    },
-    configuration: {
-      accountUrl: process.env.SNOWFLAKE_ACCOUNT_URL || 'NOT SET',
-      database: process.env.ANALYST_DB || 'NOT SET',
-      schema: process.env.ANALYST_SCHEMA || 'NOT SET',
-      warehouse: process.env.WAREHOUSE || 'NOT SET',
-      semanticModel: process.env.SEMANTIC_MODEL_FILE || process.env.SEMANTIC_VIEW || 'NOT SET'
-    },
-    validTenants: VALID_TENANTS,
-    sqlTest,
-    status: {
-      ready: sqlTest.success && (isSpcs || hasPat)
-    }
-  });
 });
 
 /**
@@ -457,7 +734,7 @@ app.post('/api/test-sql', async (req, res) => {
     if (tenantId && VALID_TENANTS.includes(tenantId)) {
       result = await executeSecureSql(sql, tenantId);
     } else {
-      result = await executeSql(sql);
+      result = await runSqlStatement(sql);
     }
     
     res.json({
@@ -470,13 +747,40 @@ app.post('/api/test-sql', async (req, res) => {
   }
 });
 
+/**
+ * Direct Analyst test endpoint (for debugging)
+ * Calls Cortex Analyst without tenant isolation
+ */
+app.post('/api/test-analyst', async (req, res) => {
+  try {
+    const { question } = req.body;
+    
+    if (!question) {
+      return res.status(400).json({ ok: false, error: 'Question required' });
+    }
+    
+    const result = await callCortexAnalyst(question);
+    
+    res.json({
+      ok: true,
+      sql: result.sql,
+      explanation: result.explanation,
+      suggestions: result.suggestions,
+      warnings: result.warnings,
+      requestId: result.requestId
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // =============================================================================
 // START SERVER
 // =============================================================================
 
 const PORT = process.env.PORT || 5173;
 app.listen(PORT, () => {
-  const missing = REQUIRED_ENV.filter(k => !process.env[k]);
+  const missing = REQUIRED_ENV.filter((k) => !process.env[k]);
   const isSpcs = fs.existsSync(SPCS_TOKEN_PATH);
   const hasPat = !!process.env.AUTH_TOKEN;
   const authMethod = isSpcs ? 'SPCS OAuth' : (hasPat ? 'PAT Token' : 'NONE - ERROR');
@@ -486,13 +790,14 @@ app.listen(PORT, () => {
   console.log(`${'='.repeat(60)}`);
   console.log(`Server: http://localhost:${PORT}`);
   console.log(`Auth:   ${authMethod}`);
+  console.log(`Semantic View: ${process.env.SEMANTIC_VIEW || 'NOT SET'}`);
+  console.log(`Warehouse: ${process.env.WAREHOUSE || 'NOT SET'}`);
   console.log(`Missing env: ${missing.length ? missing.join(', ') : 'none'}`);
   console.log(`Valid tenants: ${VALID_TENANTS.join(', ')}`);
   console.log(`${'='.repeat(60)}\n`);
   
   if (!isSpcs && !hasPat) {
     console.error('[ERROR] No authentication method available!');
-    console.error('[ERROR] Set AUTH_TOKEN in backend/.env');
+    console.error('[ERROR] Local deployment requires AUTH_TOKEN in backend/.env');
   }
 });
-

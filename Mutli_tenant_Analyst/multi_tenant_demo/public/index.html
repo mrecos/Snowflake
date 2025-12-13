@@ -88,6 +88,15 @@
           <textarea id="prompt" rows="3" placeholder="e.g., What are the total sales? Show me monthly trends..."></textarea>
           <button id="btnSend" class="btn primary" title="Send message"></button>
         </div>
+        <!-- Reasoning Mode Toggle -->
+        <div class="reasoning-toggle-container">
+          <label class="reasoning-toggle">
+            <input type="checkbox" id="reasoningModeToggle">
+            <span class="reasoning-toggle-slider"></span>
+            <span class="reasoning-toggle-label">🧠 Reasoning Mode</span>
+          </label>
+          <span class="reasoning-hint">Get AI-powered analysis of your results</span>
+        </div>
       </div>
 
       <!-- Chat Messages Container -->
@@ -104,6 +113,32 @@
             It does NOT contain any tenant filter - isolation happens at the view level.
           </p>
           <pre id="generatedSql" class="sql-code-block"><code class="language-sql">-- No SQL generated yet</code></pre>
+          
+          <!-- Verbose Mode Toggle -->
+          <div class="verbose-toggle-container">
+            <label class="verbose-toggle">
+              <input type="checkbox" id="verboseModeToggle">
+              <span class="verbose-toggle-slider"></span>
+              <span class="verbose-toggle-label">Verbose Mode</span>
+            </label>
+            <span class="verbose-hint">Show full Snowflake responses</span>
+          </div>
+          
+          <!-- Verbose Output Section -->
+          <div id="verboseOutput" class="verbose-output" style="display: none;">
+            <div class="verbose-section">
+              <h4 class="verbose-section-title">📊 Cortex Analyst Response</h4>
+              <pre id="verboseAnalystResponse" class="verbose-json">-- Waiting for response...</pre>
+            </div>
+            <div class="verbose-section">
+              <h4 class="verbose-section-title">🔒 Stored Procedure Execution</h4>
+              <pre id="verboseSprocResponse" class="verbose-json">-- Waiting for response...</pre>
+            </div>
+            <div class="verbose-section" id="verboseInferenceSection" style="display: none;">
+              <h4 class="verbose-section-title">🧠 Cortex Inference (Reasoning)</h4>
+              <pre id="verboseInferenceResponse" class="verbose-json">-- Waiting for response...</pre>
+            </div>
+          </div>
         </div>
       </details>
     </section>
@@ -112,6 +147,8 @@
   <!-- Scroll to Bottom Button -->
   <button id="scrollToBottom" class="scroll-to-bottom" title="Scroll to bottom">↓</button>
   
+  <!-- Marked.js for Markdown rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

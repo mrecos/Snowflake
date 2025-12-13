@@ -7,19 +7,28 @@
 --   3. EXECUTE_SECURE_SQL procedure - Safe SQL execution with tenant context
 -- =============================================================================
 
+CREATE SCHEMA CORTEX_TESTING.MULT_TENANT;
+
+CREATE OR REPLACE STAGE CORTEX_TESTING.MULT_TENANT.SALES_DATA_STAGE
+  FILE_FORMAT = (
+    TYPE = CSV
+    FIELD_OPTIONALLY_ENCLOSED_BY = '"'
+    SKIP_HEADER = 1
+    NULL_IF = ('', 'NULL')
+  );
+  
 -- Set your database and schema context
 -- CHANGE THESE TO MATCH YOUR ENVIRONMENT
-USE DATABASE YOUR_DATABASE;
-USE SCHEMA YOUR_SCHEMA;
-USE WAREHOUSE YOUR_WAREHOUSE;
+USE DATABASE CORTEX_TESTING;
+USE SCHEMA MULT_TENANT;
+USE WAREHOUSE BI_MEDIUM_WH;
 
 -- =============================================================================
 -- STEP 1: Create the Raw Data Table
 -- =============================================================================
-
-CREATE OR REPLACE TABLE SALES_DATA_RAW (
+CREATE OR REPLACE TABLE PRODUCT_DATA_RAW (
     TRANS_ID VARCHAR(20) PRIMARY KEY,
-    CONTAINER_ID VARCHAR(20) NOT NULL,      -- The Tenant ID (CRITICAL for isolation)
+    CUSTOMER_ID VARCHAR(20) NOT NULL,      -- The customer ID (CRITICAL for isolation)
     ORDER_DATE DATE NOT NULL,
     PRODUCT_LINE VARCHAR(50) NOT NULL,
     PRODUCT_NAME VARCHAR(100) NOT NULL,
@@ -30,30 +39,14 @@ CREATE OR REPLACE TABLE SALES_DATA_RAW (
 );
 
 -- Add comment for documentation
-COMMENT ON TABLE SALES_DATA_RAW IS 
-'Multi-tenant sales data. CONTAINER_ID is the tenant identifier. 
+COMMENT ON TABLE PRODUCT_DATA_RAW IS 
+'Multi-tenant product data. CUSTOMER_ID is the tenant identifier. 
 Access should only be through V_SEMANTIC_SALES view.';
 
--- =============================================================================
--- STEP 2: Load Sample Data
--- =============================================================================
--- Run the Python script first to generate sales_data.csv, then:
--- Option A: Use Snowsight file upload
--- Option B: Stage and copy (example below)
 
--- CREATE OR REPLACE STAGE sales_data_stage;
--- PUT file:///path/to/sales_data.csv @sales_data_stage;
--- COPY INTO SALES_DATA_RAW FROM @sales_data_stage
---   FILE_FORMAT = (TYPE = CSV FIELD_OPTIONALLY_ENCLOSED_BY='"' SKIP_HEADER = 1);
-
--- =============================================================================
--- STEP 3: Create the Secure View (The "Clean Room")
--- =============================================================================
--- This view filters data by the CURRENT_TENANT_ID session variable.
--- The Semantic Model will point to THIS view, not the raw table.
-
-CREATE OR REPLACE SECURE VIEW V_SEMANTIC_SALES AS
-SELECT
+COPY INTO PRODUCT_DATA_RAW (
+    TRANS_ID,
+    CUSTOMER_ID,
     ORDER_DATE,
     PRODUCT_LINE,
     PRODUCT_NAME,
@@ -61,55 +54,128 @@ SELECT
     QUANTITY,
     SALES_AMOUNT,
     PROFIT_MARGIN
-FROM SALES_DATA_RAW
-WHERE CONTAINER_ID = GETVARIABLE('CURRENT_TENANT_ID');
+)
+FROM @CORTEX_TESTING.MULT_TENANT.SALES_DATA_STAGE
+FILE_FORMAT = (
+    TYPE = CSV
+    FIELD_OPTIONALLY_ENCLOSED_BY = '"'
+    SKIP_HEADER = 1
+    NULL_IF = ('', 'NULL')
+)
+ON_ERROR = 'CONTINUE';
 
--- Add comment for documentation
-COMMENT ON VIEW V_SEMANTIC_SALES IS 
-'Secure view for multi-tenant sales data. Filters by CURRENT_TENANT_ID session variable. 
-This is what the Semantic Model references - it hides CONTAINER_ID from the AI.';
+SELECT 
+    CUSTOMER_ID,
+    COUNT(*) as ROW_COUNT,
+    SUM(SALES_AMOUNT) as TOTAL_SALES
+FROM PRODUCT_DATA_RAW
+GROUP BY CUSTOMER_ID
+ORDER BY CUSTOMER_ID;
 
 -- =============================================================================
--- STEP 4: Create the Secure SQL Execution Procedure
+-- STEP 2: Create the Session State Table (The "Context Table")
 -- =============================================================================
--- This procedure:
---   1. Sets the tenant context (session variable)
---   2. Executes the provided SQL
---   3. Returns results (session variable is auto-scoped to procedure call)
+-- This table stores the active tenant context for each session.
+-- It is written to by the stored procedure and read by the secure view.
+-- Each row is keyed by CURRENT_SESSION() to ensure isolation between users.
+
+CREATE OR REPLACE TABLE APP_SESSION_STATE (
+    SESSION_ID VARCHAR NOT NULL,
+    CUSTOMER_ID VARCHAR(20) NOT NULL,
+    CREATED_AT TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+    PRIMARY KEY (SESSION_ID)
+);
+
+COMMENT ON TABLE APP_SESSION_STATE IS 
+'Session-keyed context table for multi-tenant isolation.
+Stores the active CUSTOMER_ID for each Snowflake session.
+Only the EXECUTE_SECURE_SQL procedure should write to this table.';
+
+
+-- =============================================================================
+-- STEP 4: Create the Secure View (The "Clean Room")
+-- =============================================================================
+-- This view filters data by looking up the tenant from APP_SESSION_STATE
+-- using the current session ID. This is the "magic link" that enables
+-- tenant isolation in Owner's Rights stored procedures.
 --
--- Note: Session variables set within a procedure are scoped to that execution
--- and do not persist after the procedure ends, so no explicit cleanup needed.
+-- The Semantic Model points to THIS view, not the raw table.
+-- The AI never sees CUSTOMER_ID or knows multi-tenancy exists.
 
-CREATE OR REPLACE PROCEDURE EXECUTE_SECURE_SQL(sql_query STRING, tenant_id STRING)
+CREATE OR REPLACE SECURE VIEW V_SEMANTIC_SALES AS
+SELECT
+    CUSTOMER_ID,
+    ORDER_DATE,
+    PRODUCT_LINE,
+    PRODUCT_NAME,
+    REGION,
+    QUANTITY,
+    SALES_AMOUNT,
+    PROFIT_MARGIN
+FROM PRODUCT_DATA_RAW
+WHERE CUSTOMER_ID = (
+    SELECT CUSTOMER_ID 
+    FROM APP_SESSION_STATE 
+    WHERE SESSION_ID = CURRENT_SESSION()
+);
+
+COMMENT ON VIEW V_SEMANTIC_SALES IS 
+'Secure view for multi-tenant sales data. 
+Filters by looking up CUSTOMER_ID from APP_SESSION_STATE using CURRENT_SESSION().
+This is what the Semantic Model references - it hides CUSTOMER_ID from the AI.';
+
+
+
+-- =============================================================================
+-- STEP 5: Create the Secure SQL Execution Procedure
+-- =============================================================================
+-- This procedure implements the "Session-Keyed Context Table" pattern:
+--   1. CLEANUP: Remove any stale state for this session
+--   2. SET CONTEXT: Insert the tenant ID for this session
+--   3. EXECUTE: Run the Cortex-generated SQL (view reads from context table)
+--   4. CLEANUP: Remove the state after execution
+--
+-- EXECUTE AS OWNER is critical - it allows the procedure to:
+--   - Write to APP_SESSION_STATE (users cannot)
+--   - Read from SALES_DATA_RAW through the view (users cannot directly)
+
+CREATE OR REPLACE PROCEDURE EXECUTE_SECURE_SQL(sql_query STRING, customer_id STRING)
 RETURNS TABLE()
 LANGUAGE SQL
 EXECUTE AS OWNER
 AS
 $$
 DECLARE
-    res RESULTSET;
+    rs RESULTSET;
 BEGIN
-    -- 1. Set the tenant context via session variable
-    EXECUTE IMMEDIATE 'SET CURRENT_TENANT_ID = ''' || :tenant_id || '''';
+    -- 1. CLEANUP (Defensive): Remove any stale state for this session
+    DELETE FROM APP_SESSION_STATE WHERE SESSION_ID = CURRENT_SESSION();
+
+    -- 2. SET CONTEXT: Write the customer ID for this specific session
+    INSERT INTO APP_SESSION_STATE (SESSION_ID, CUSTOMER_ID) 
+    VALUES (CURRENT_SESSION(), :customer_id);
+
+    -- 3. EXECUTE: Run the Cortex-generated SQL
+    -- The View will look up CURRENT_SESSION() in the table and find the ID we just inserted
+    rs := (EXECUTE IMMEDIATE :sql_query);
+
+    -- 4. CLEANUP: Remove the state immediately after execution
+    DELETE FROM APP_SESSION_STATE WHERE SESSION_ID = CURRENT_SESSION();
     
-    -- 2. Execute the provided SQL query
-    res := (EXECUTE IMMEDIATE :sql_query);
-    
-    -- 3. Return the results
-    -- Session variable is automatically scoped to this procedure call
-    RETURN TABLE(res);
+    RETURN TABLE(rs);
 
 EXCEPTION
     WHEN OTHER THEN
-        -- Re-raise the exception (session var is auto-cleaned up)
+        -- Ensure we clean up even on error to prevent state leaks
+        DELETE FROM APP_SESSION_STATE WHERE SESSION_ID = CURRENT_SESSION();
         RAISE;
 END;
 $$;
 
--- Add comment for documentation
 COMMENT ON PROCEDURE EXECUTE_SECURE_SQL(STRING, STRING) IS 
-'Executes SQL in a tenant-isolated context. Sets CURRENT_TENANT_ID session variable 
-before execution and cleans up after. Use with V_SEMANTIC_SALES view.';
+'Executes SQL in a tenant-isolated context using the Session-Keyed Context Table pattern.
+Inserts tenant context into APP_SESSION_STATE before execution and cleans up after.
+The V_SEMANTIC_SALES view reads from this table to filter by tenant.';
 
 -- =============================================================================
 -- STEP 5: Grant Permissions (Adjust roles as needed)
@@ -125,33 +191,20 @@ before execution and cleans up after. Use with V_SEMANTIC_SALES view.';
 
 -- Test 1: Verify raw data loaded correctly
 SELECT 
-    CONTAINER_ID,
+    CUSTOMER_ID,
     COUNT(*) as ROW_COUNT,
     SUM(SALES_AMOUNT) as TOTAL_SALES
-FROM SALES_DATA_RAW
-GROUP BY CONTAINER_ID
-ORDER BY CONTAINER_ID;
-
--- Test 2: Verify secure view with tenant context
--- Note: Each SET overwrites the previous value, so no UNSET needed between tests
-SET CURRENT_TENANT_ID = 'TENANT_100';
-SELECT 'TENANT_100' as TENANT, COUNT(*) as ROW_COUNT, SUM(SALES_AMOUNT) as TOTAL_SALES FROM V_SEMANTIC_SALES;
-
-SET CURRENT_TENANT_ID = 'TENANT_200';
-SELECT 'TENANT_200' as TENANT, COUNT(*) as ROW_COUNT, SUM(SALES_AMOUNT) as TOTAL_SALES FROM V_SEMANTIC_SALES;
-
-SET CURRENT_TENANT_ID = 'TENANT_300';
-SELECT 'TENANT_300' as TENANT, COUNT(*) as ROW_COUNT, SUM(SALES_AMOUNT) as TOTAL_SALES FROM V_SEMANTIC_SALES;
-
--- Clear the session variable by setting to NULL
-SET CURRENT_TENANT_ID = NULL;
+FROM PRODUCT_DATA_RAW
+GROUP BY CUSTOMER_ID
+ORDER BY CUSTOMER_ID;
 
 -- Test 3: Verify the stored procedure works
 CALL EXECUTE_SECURE_SQL('SELECT SUM(SALES_AMOUNT) as TOTAL_SALES FROM V_SEMANTIC_SALES', 'TENANT_100');
+CALL EXECUTE_SECURE_SQL('SELECT SUM(SALES_AMOUNT) as TOTAL_SALES FROM V_SEMANTIC_SALES', 'TENANT_100');
 CALL EXECUTE_SECURE_SQL('SELECT SUM(SALES_AMOUNT) as TOTAL_SALES FROM V_SEMANTIC_SALES', 'TENANT_200');
-CALL EXECUTE_SECURE_SQL('SELECT SUM(SALES_AMOUNT) as TOTAL_SALES FROM V_SEMANTIC_SALES', 'TENANT_300');
+CALL EXECUTE_SECURE_SQL('SELECT * FROM V_SEMANTIC_SALES', 'TENANT_300');
 
--- Test 4: Verify no data leakage (should return empty without context)
+-- Test 3: Verify no data leakage (should return empty without context)
 -- This should return 0 rows since no tenant context is set
 SELECT COUNT(*) FROM V_SEMANTIC_SALES;
 

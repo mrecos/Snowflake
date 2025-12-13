@@ -39,6 +39,13 @@ const scrollToBottomBtn = document.getElementById('scrollToBottom');
 const welcomeSection = document.getElementById('welcomeSection');
 const generatedSqlEl = document.getElementById('generatedSql');
 const sqlDebugDetails = document.getElementById('sqlDebugDetails');
+const verboseModeToggle = document.getElementById('verboseModeToggle');
+const verboseOutput = document.getElementById('verboseOutput');
+const verboseAnalystResponse = document.getElementById('verboseAnalystResponse');
+const verboseSprocResponse = document.getElementById('verboseSprocResponse');
+const verboseInferenceSection = document.getElementById('verboseInferenceSection');
+const verboseInferenceResponse = document.getElementById('verboseInferenceResponse');
+const reasoningModeToggle = document.getElementById('reasoningModeToggle');
 
 // =============================================================================
 // STATE
@@ -48,6 +55,9 @@ let config = null;
 let currentTenant = 'TENANT_100';
 let conversations = []; // Array of { id, tenantId, title, messages, createdAt }
 let currentConversationId = null;
+let verboseMode = false;
+let lastVerboseData = null;
+let reasoningMode = false;
 
 const STORAGE_KEY = 'multitenant_demo_conversations';
 const MAX_CONVERSATIONS = 10;
@@ -102,14 +112,28 @@ const thinkingMessages = [
   'Almost there...'
 ];
 
+const thinkingMessagesReasoning = [
+  'Generating SQL query...',
+  'Applying tenant context...',
+  'Executing secure query...',
+  'Analyzing your data...',
+  'Generating insights...',
+  'Preparing analysis...'
+];
+
 function showThinkingIndicator() {
+  const messages = reasoningMode ? thinkingMessagesReasoning : thinkingMessages;
+  
   const indicator = document.createElement('div');
   indicator.className = 'thinking-indicator';
+  if (reasoningMode) {
+    indicator.classList.add('reasoning-active');
+  }
   indicator.id = 'thinkingIndicator';
   
   const text = document.createElement('span');
   text.id = 'thinkingText';
-  text.textContent = thinkingMessages[0];
+  text.textContent = messages[0];
   
   const dots = document.createElement('div');
   dots.className = 'thinking-dots';
@@ -122,9 +146,9 @@ function showThinkingIndicator() {
   
   let idx = 0;
   thinkingInterval = setInterval(() => {
-    idx = (idx + 1) % thinkingMessages.length;
+    idx = (idx + 1) % messages.length;
     const el = document.getElementById('thinkingText');
-    if (el) el.textContent = thinkingMessages[idx];
+    if (el) el.textContent = messages[idx];
   }, 2000);
 }
 
@@ -333,11 +357,18 @@ function appendAgentMessage(text, sql, resultSet, tenantId, timestamp = null) {
   const content = document.createElement('div');
   content.className = 'message-content';
   
-  // Add text content
+  // Add text content with markdown formatting
   if (text) {
-    const p = document.createElement('p');
-    p.textContent = text;
-    content.appendChild(p);
+    const textWrapper = document.createElement('div');
+    textWrapper.className = 'formatted-response';
+    // Use marked.js for full markdown parsing
+    if (window.marked) {
+      textWrapper.innerHTML = marked.parse(text);
+    } else {
+      // Fallback: at least convert newlines to <br>
+      textWrapper.innerHTML = text.replace(/\n/g, '<br>');
+    }
+    content.appendChild(textWrapper);
   }
   
   // Add result table if present
@@ -458,6 +489,108 @@ function escapeHtml(str) {
 }
 
 // =============================================================================
+// VERBOSE MODE
+// =============================================================================
+
+function initVerboseMode() {
+  if (verboseModeToggle) {
+    verboseModeToggle.addEventListener('change', (e) => {
+      verboseMode = e.target.checked;
+      verboseOutput.style.display = verboseMode ? 'block' : 'none';
+      console.log('[verbose] Mode:', verboseMode ? 'ON' : 'OFF');
+      
+      // If we have cached verbose data, display it
+      if (verboseMode && lastVerboseData) {
+        updateVerboseDisplay(lastVerboseData);
+      }
+    });
+  }
+}
+
+function updateVerboseDisplay(verboseData) {
+  if (!verboseData) return;
+  
+  lastVerboseData = verboseData;
+  
+  if (!verboseMode) return;
+  
+  // Format Cortex Analyst response
+  if (verboseAnalystResponse && verboseData.analystResponse) {
+    const analystData = verboseData.analystResponse;
+    verboseAnalystResponse.textContent = JSON.stringify({
+      timestamp: analystData.timestamp,
+      requestId: analystData.requestId,
+      sql: analystData.sql,
+      explanation: analystData.explanation ? (analystData.explanation.substring(0, 200) + (analystData.explanation.length > 200 ? '...' : '')) : null,
+      suggestions: analystData.suggestions || null,
+      warnings: analystData.warnings || []
+    }, null, 2);
+  } else if (verboseAnalystResponse) {
+    verboseAnalystResponse.textContent = '-- No analyst response data';
+  }
+  
+  // Format sproc response
+  if (verboseSprocResponse && verboseData.sprocExecution) {
+    const sprocData = verboseData.sprocExecution;
+    verboseSprocResponse.textContent = JSON.stringify({
+      timestamp: sprocData.timestamp,
+      sql: sprocData.sql,
+      success: sprocData.success,
+      rowCount: sprocData.rowCount,
+      columnCount: sprocData.columnCount,
+      columns: sprocData.columns,
+      error: sprocData.error || null,
+      rawResponse: sprocData.rawResponse ? {
+        status: sprocData.rawResponse.status,
+        statementHandle: sprocData.rawResponse.statementHandle,
+        dataPreview: sprocData.rawResponse.data?.slice(0, 3)
+      } : null
+    }, null, 2);
+  } else if (verboseSprocResponse) {
+    verboseSprocResponse.textContent = '-- No stored procedure execution (Analyst returned text-only response)';
+  }
+  
+  // Format inference response (Reasoning mode)
+  if (verboseInferenceSection && verboseInferenceResponse) {
+    if (verboseData.inferenceResponse) {
+      verboseInferenceSection.style.display = 'block';
+      const inferenceData = verboseData.inferenceResponse;
+      verboseInferenceResponse.textContent = JSON.stringify({
+        timestamp: inferenceData.timestamp,
+        model: inferenceData.model || null,
+        usage: inferenceData.usage || null,
+        contentLength: inferenceData.contentLength || 0,
+        success: inferenceData.success,
+        error: inferenceData.error || null
+      }, null, 2);
+    } else {
+      verboseInferenceSection.style.display = 'none';
+      verboseInferenceResponse.textContent = '-- Reasoning mode not enabled';
+    }
+  }
+}
+
+// =============================================================================
+// REASONING MODE
+// =============================================================================
+
+function initReasoningMode() {
+  if (reasoningModeToggle) {
+    const container = reasoningModeToggle.closest('.reasoning-toggle-container');
+    
+    reasoningModeToggle.addEventListener('change', (e) => {
+      reasoningMode = e.target.checked;
+      console.log('[reasoning] Mode:', reasoningMode ? 'ON' : 'OFF');
+      
+      // Update visual styling
+      if (container) {
+        container.classList.toggle('active', reasoningMode);
+      }
+    });
+  }
+}
+
+// =============================================================================
 // CONFIG & HEALTH
 // =============================================================================
 
@@ -547,8 +680,8 @@ function renderDebugInfo(data) {
   html += `<div class="debug-section">
     <div class="debug-section-title">Configuration</div>
     <div class="debug-row">
-      <span class="debug-key">Account:</span>
-      <span class="debug-value" style="font-size: 11px;">${data.configuration?.accountUrl || 'NOT SET'}</span>
+      <span class="debug-key">Semantic View:</span>
+      <span class="debug-value" style="font-size: 11px;">${data.configuration?.semanticView || 'NOT SET'}</span>
     </div>
     <div class="debug-row">
       <span class="debug-key">Database:</span>
@@ -561,10 +694,6 @@ function renderDebugInfo(data) {
     <div class="debug-row">
       <span class="debug-key">Warehouse:</span>
       <span class="debug-value">${data.configuration?.warehouse || 'NOT SET'}</span>
-    </div>
-    <div class="debug-row">
-      <span class="debug-key">Semantic Model:</span>
-      <span class="debug-value" style="font-size: 11px;">${data.configuration?.semanticModel || 'NOT SET'}</span>
     </div>
   </div>`;
   
@@ -666,7 +795,7 @@ async function sendMessage() {
     const resp = await fetchJson('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: prompt, tenantId })
+      body: JSON.stringify({ message: prompt, tenantId, reasoningMode })
     });
     
     hideThinkingIndicator();
@@ -685,6 +814,11 @@ async function sendMessage() {
       saveConversations();
       
       appendAgentMessage(agentMsg.content, agentMsg.sql, agentMsg.resultSet, tenantId, agentMsg.timestamp);
+      
+      // Update verbose display if available
+      if (resp.verbose) {
+        updateVerboseDisplay(resp.verbose);
+      }
       
       statusDot.className = 'status-dot connected';
       statusText.textContent = 'Connected';
@@ -757,6 +891,12 @@ async function init() {
   
   // Initialize tenant UI
   updateTenantUI();
+  
+  // Initialize verbose mode
+  initVerboseMode();
+  
+  // Initialize reasoning mode
+  initReasoningMode();
   
   // Load conversations
   loadConversations();
