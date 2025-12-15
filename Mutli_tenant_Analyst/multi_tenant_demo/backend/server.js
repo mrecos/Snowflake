@@ -680,12 +680,22 @@ Please provide an insightful analysis of these results for the customer.`;
           console.log(`[chat] Inference analysis generated successfully`);
         }
         
-        // Track inference for verbose mode
+        // Track inference for verbose mode (include request details)
         verboseData.inferenceResponse = {
           timestamp: new Date().toISOString(),
-          model: inferenceResult.model,
-          usage: inferenceResult.usage,
-          contentLength: inferenceResult.content?.length || 0,
+          request: {
+            endpoint: '/api/v2/cortex/inference:complete',
+            model: 'claude-3-5-sonnet',
+            systemPrompt: systemPrompt.substring(0, 300) + (systemPrompt.length > 300 ? '...' : ''),
+            userMessageLength: userMessage.length,
+            userMessagePreview: userMessage.substring(0, 500) + (userMessage.length > 500 ? '...' : '')
+          },
+          response: {
+            model: inferenceResult.model,
+            usage: inferenceResult.usage,
+            contentLength: inferenceResult.content?.length || 0,
+            contentPreview: inferenceResult.content ? (inferenceResult.content.substring(0, 300) + (inferenceResult.content.length > 300 ? '...' : '')) : null
+          },
           success: true
         };
         
@@ -694,6 +704,12 @@ Please provide an insightful analysis of these results for the customer.`;
         // Fall back to analyst explanation if inference fails
         verboseData.inferenceResponse = {
           timestamp: new Date().toISOString(),
+          request: {
+            endpoint: '/api/v2/cortex/inference:complete',
+            model: 'claude-3-5-sonnet',
+            systemPrompt: systemPrompt.substring(0, 300) + (systemPrompt.length > 300 ? '...' : ''),
+            userMessageLength: userMessage.length
+          },
           success: false,
           error: inferenceError.message
         };

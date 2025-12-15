@@ -15,7 +15,22 @@
   <div class="status-indicator">
     <span class="status-dot" id="statusDot"></span>
     <span class="status-text" id="statusText">Connecting...</span>
+    <button id="btnApiTraces" class="btn-debug-toggle" title="Show API Traces">📡</button>
     <button id="btnDebugToggle" class="btn-debug-toggle" title="Show Debug Info">🔍</button>
+  </div>
+
+  <!-- API Traces Panel -->
+  <div id="apiTracesPanel" class="api-traces-panel" style="display: none;">
+    <div class="api-traces-header">
+      <h3>📡 API Traces</h3>
+      <span class="api-traces-hint">Live request/response data from Snowflake APIs</span>
+      <button id="btnApiTracesClose" class="btn-debug-close">×</button>
+    </div>
+    <div class="api-traces-content" id="apiTracesContent">
+      <div class="api-trace-empty">
+        <p>No API calls yet. Send a message to see traces here.</p>
+      </div>
+    </div>
   </div>
 
   <!-- Debug Panel -->
@@ -113,32 +128,6 @@
             It does NOT contain any tenant filter - isolation happens at the view level.
           </p>
           <pre id="generatedSql" class="sql-code-block"><code class="language-sql">-- No SQL generated yet</code></pre>
-          
-          <!-- Verbose Mode Toggle -->
-          <div class="verbose-toggle-container">
-            <label class="verbose-toggle">
-              <input type="checkbox" id="verboseModeToggle">
-              <span class="verbose-toggle-slider"></span>
-              <span class="verbose-toggle-label">Verbose Mode</span>
-            </label>
-            <span class="verbose-hint">Show full Snowflake responses</span>
-          </div>
-          
-          <!-- Verbose Output Section -->
-          <div id="verboseOutput" class="verbose-output" style="display: none;">
-            <div class="verbose-section">
-              <h4 class="verbose-section-title">📊 Cortex Analyst Response</h4>
-              <pre id="verboseAnalystResponse" class="verbose-json">-- Waiting for response...</pre>
-            </div>
-            <div class="verbose-section">
-              <h4 class="verbose-section-title">🔒 Stored Procedure Execution</h4>
-              <pre id="verboseSprocResponse" class="verbose-json">-- Waiting for response...</pre>
-            </div>
-            <div class="verbose-section" id="verboseInferenceSection" style="display: none;">
-              <h4 class="verbose-section-title">🧠 Cortex Inference (Reasoning)</h4>
-              <pre id="verboseInferenceResponse" class="verbose-json">-- Waiting for response...</pre>
-            </div>
-          </div>
         </div>
       </details>
     </section>

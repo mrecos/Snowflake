@@ -39,13 +39,13 @@ const scrollToBottomBtn = document.getElementById('scrollToBottom');
 const welcomeSection = document.getElementById('welcomeSection');
 const generatedSqlEl = document.getElementById('generatedSql');
 const sqlDebugDetails = document.getElementById('sqlDebugDetails');
-const verboseModeToggle = document.getElementById('verboseModeToggle');
-const verboseOutput = document.getElementById('verboseOutput');
-const verboseAnalystResponse = document.getElementById('verboseAnalystResponse');
-const verboseSprocResponse = document.getElementById('verboseSprocResponse');
-const verboseInferenceSection = document.getElementById('verboseInferenceSection');
-const verboseInferenceResponse = document.getElementById('verboseInferenceResponse');
 const reasoningModeToggle = document.getElementById('reasoningModeToggle');
+
+// API Traces Panel elements
+const apiTracesPanel = document.getElementById('apiTracesPanel');
+const apiTracesContent = document.getElementById('apiTracesContent');
+const btnApiTraces = document.getElementById('btnApiTraces');
+const btnApiTracesClose = document.getElementById('btnApiTracesClose');
 
 // =============================================================================
 // STATE
@@ -55,9 +55,9 @@ let config = null;
 let currentTenant = 'TENANT_100';
 let conversations = []; // Array of { id, tenantId, title, messages, createdAt }
 let currentConversationId = null;
-let verboseMode = false;
 let lastVerboseData = null;
 let reasoningMode = false;
+let apiTracesPanelOpen = false;
 
 const STORAGE_KEY = 'multitenant_demo_conversations';
 const MAX_CONVERSATIONS = 10;
@@ -489,20 +489,25 @@ function escapeHtml(str) {
 }
 
 // =============================================================================
-// VERBOSE MODE
+// API TRACES PANEL
 // =============================================================================
 
-function initVerboseMode() {
-  if (verboseModeToggle) {
-    verboseModeToggle.addEventListener('change', (e) => {
-      verboseMode = e.target.checked;
-      verboseOutput.style.display = verboseMode ? 'block' : 'none';
-      console.log('[verbose] Mode:', verboseMode ? 'ON' : 'OFF');
-      
-      // If we have cached verbose data, display it
-      if (verboseMode && lastVerboseData) {
-        updateVerboseDisplay(lastVerboseData);
+function initApiTracesPanel() {
+  if (btnApiTraces) {
+    btnApiTraces.addEventListener('click', () => {
+      apiTracesPanelOpen = true;
+      apiTracesPanel.style.display = 'flex';
+      // If we have cached data, display it
+      if (lastVerboseData) {
+        renderApiTraces(lastVerboseData);
       }
+    });
+  }
+  
+  if (btnApiTracesClose) {
+    btnApiTracesClose.addEventListener('click', () => {
+      apiTracesPanelOpen = false;
+      apiTracesPanel.style.display = 'none';
     });
   }
 }
@@ -512,62 +517,123 @@ function updateVerboseDisplay(verboseData) {
   
   lastVerboseData = verboseData;
   
-  if (!verboseMode) return;
+  // Always render if panel is open
+  if (apiTracesPanelOpen) {
+    renderApiTraces(verboseData);
+  }
+}
+
+function renderApiTraces(verboseData) {
+  if (!apiTracesContent) return;
   
-  // Format Cortex Analyst response
-  if (verboseAnalystResponse && verboseData.analystResponse) {
-    const analystData = verboseData.analystResponse;
-    verboseAnalystResponse.textContent = JSON.stringify({
-      timestamp: analystData.timestamp,
-      requestId: analystData.requestId,
-      sql: analystData.sql,
-      explanation: analystData.explanation ? (analystData.explanation.substring(0, 200) + (analystData.explanation.length > 200 ? '...' : '')) : null,
-      suggestions: analystData.suggestions || null,
-      warnings: analystData.warnings || []
-    }, null, 2);
-  } else if (verboseAnalystResponse) {
-    verboseAnalystResponse.textContent = '-- No analyst response data';
+  let html = '';
+  
+  // 1. Cortex Analyst API Call
+  html += `<div class="api-trace-section">
+    <div class="api-trace-header">
+      <span class="api-trace-icon">📊</span>
+      <span class="api-trace-title">Cortex Analyst</span>
+      <span class="api-trace-endpoint">/api/v2/cortex/analyst/message</span>
+    </div>`;
+  
+  if (verboseData.analystResponse) {
+    const analyst = verboseData.analystResponse;
+    html += `<div class="api-trace-body">
+      <div class="api-trace-subsection">
+        <div class="api-trace-label">Response</div>
+        <pre class="api-trace-json">${escapeHtml(JSON.stringify({
+          timestamp: analyst.timestamp,
+          requestId: analyst.requestId,
+          sql: analyst.sql,
+          explanation: analyst.explanation ? (analyst.explanation.substring(0, 300) + (analyst.explanation.length > 300 ? '...' : '')) : null,
+          suggestions: analyst.suggestions || null,
+          warnings: analyst.warnings || []
+        }, null, 2))}</pre>
+      </div>
+    </div>`;
+  } else {
+    html += `<div class="api-trace-body api-trace-empty-msg">No analyst response data</div>`;
+  }
+  html += `</div>`;
+  
+  // 2. Stored Procedure Execution
+  html += `<div class="api-trace-section">
+    <div class="api-trace-header">
+      <span class="api-trace-icon">🔒</span>
+      <span class="api-trace-title">Secure SQL Execution</span>
+      <span class="api-trace-endpoint">CALL EXECUTE_SECURE_SQL()</span>
+    </div>`;
+  
+  if (verboseData.sprocExecution) {
+    const sproc = verboseData.sprocExecution;
+    html += `<div class="api-trace-body">
+      <div class="api-trace-subsection">
+        <div class="api-trace-label">Request</div>
+        <pre class="api-trace-json">${escapeHtml(JSON.stringify({
+          sql: sproc.sql
+        }, null, 2))}</pre>
+      </div>
+      <div class="api-trace-subsection">
+        <div class="api-trace-label">Response</div>
+        <pre class="api-trace-json">${escapeHtml(JSON.stringify({
+          timestamp: sproc.timestamp,
+          success: sproc.success,
+          rowCount: sproc.rowCount,
+          columnCount: sproc.columnCount,
+          columns: sproc.columns,
+          error: sproc.error || null,
+          rawResponse: sproc.rawResponse ? {
+            status: sproc.rawResponse.status,
+            statementHandle: sproc.rawResponse.statementHandle,
+            dataPreview: sproc.rawResponse.data?.slice(0, 3)
+          } : null
+        }, null, 2))}</pre>
+      </div>
+    </div>`;
+  } else {
+    html += `<div class="api-trace-body api-trace-empty-msg">No stored procedure execution (Analyst returned text-only response)</div>`;
+  }
+  html += `</div>`;
+  
+  // 3. Cortex Inference (Reasoning Mode) - only show if data exists
+  if (verboseData.inferenceResponse) {
+    const inference = verboseData.inferenceResponse;
+    const statusClass = inference.success ? 'success' : 'error';
+    
+    html += `<div class="api-trace-section api-trace-inference">
+      <div class="api-trace-header">
+        <span class="api-trace-icon">🧠</span>
+        <span class="api-trace-title">Cortex Inference (Reasoning Mode)</span>
+        <span class="api-trace-endpoint">${inference.request?.endpoint || '/api/v2/cortex/inference:complete'}</span>
+        <span class="api-trace-status ${statusClass}">${inference.success ? '✓ Success' : '✗ Failed'}</span>
+      </div>
+      <div class="api-trace-body">
+        <div class="api-trace-subsection">
+          <div class="api-trace-label">Request</div>
+          <pre class="api-trace-json">${escapeHtml(JSON.stringify({
+            model: inference.request?.model || 'claude-3-5-sonnet',
+            systemPrompt: inference.request?.systemPrompt || null,
+            userMessageLength: inference.request?.userMessageLength || 0,
+            userMessagePreview: inference.request?.userMessagePreview || null
+          }, null, 2))}</pre>
+        </div>
+        <div class="api-trace-subsection">
+          <div class="api-trace-label">Response</div>
+          <pre class="api-trace-json">${escapeHtml(JSON.stringify({
+            timestamp: inference.timestamp,
+            model: inference.response?.model || inference.model || null,
+            usage: inference.response?.usage || inference.usage || null,
+            contentLength: inference.response?.contentLength || inference.contentLength || 0,
+            contentPreview: inference.response?.contentPreview || null,
+            success: inference.success,
+            error: inference.error || null
+          }, null, 2))}</pre>
+        </div>
+      </div>
+    </div>`;
   }
   
-  // Format sproc response
-  if (verboseSprocResponse && verboseData.sprocExecution) {
-    const sprocData = verboseData.sprocExecution;
-    verboseSprocResponse.textContent = JSON.stringify({
-      timestamp: sprocData.timestamp,
-      sql: sprocData.sql,
-      success: sprocData.success,
-      rowCount: sprocData.rowCount,
-      columnCount: sprocData.columnCount,
-      columns: sprocData.columns,
-      error: sprocData.error || null,
-      rawResponse: sprocData.rawResponse ? {
-        status: sprocData.rawResponse.status,
-        statementHandle: sprocData.rawResponse.statementHandle,
-        dataPreview: sprocData.rawResponse.data?.slice(0, 3)
-      } : null
-    }, null, 2);
-  } else if (verboseSprocResponse) {
-    verboseSprocResponse.textContent = '-- No stored procedure execution (Analyst returned text-only response)';
-  }
-  
-  // Format inference response (Reasoning mode)
-  if (verboseInferenceSection && verboseInferenceResponse) {
-    if (verboseData.inferenceResponse) {
-      verboseInferenceSection.style.display = 'block';
-      const inferenceData = verboseData.inferenceResponse;
-      verboseInferenceResponse.textContent = JSON.stringify({
-        timestamp: inferenceData.timestamp,
-        model: inferenceData.model || null,
-        usage: inferenceData.usage || null,
-        contentLength: inferenceData.contentLength || 0,
-        success: inferenceData.success,
-        error: inferenceData.error || null
-      }, null, 2);
-    } else {
-      verboseInferenceSection.style.display = 'none';
-      verboseInferenceResponse.textContent = '-- Reasoning mode not enabled';
-    }
-  }
+  apiTracesContent.innerHTML = html;
 }
 
 // =============================================================================
@@ -892,8 +958,8 @@ async function init() {
   // Initialize tenant UI
   updateTenantUI();
   
-  // Initialize verbose mode
-  initVerboseMode();
+  // Initialize API Traces panel
+  initApiTracesPanel();
   
   // Initialize reasoning mode
   initReasoningMode();
